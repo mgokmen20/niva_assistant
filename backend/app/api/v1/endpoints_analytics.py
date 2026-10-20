@@ -4,6 +4,7 @@ Handlers read query parameters, call the analytics service, and map DTOs.
 Aggregation stays in the service. Responses contain no wearer identifiers.
 """
 
+import logging
 from collections.abc import Awaitable, Iterator
 from datetime import date
 from typing import TypeVar
@@ -38,6 +39,8 @@ from ...services.analytics import (
 )
 from ..deps import get_db, require_partner_or_admin
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 _CSV_MEDIA_TYPE = "text/csv"
 _CSV_FILENAME = "niva-clothing-trends.csv"
@@ -49,9 +52,10 @@ async def _bounded(awaitable: Awaitable[_ResultT]) -> _ResultT:
     try:
         return await awaitable
     except AnalyticsWindowError as exc:
+        logger.warning("Analytics window was rejected.", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(exc),
+            detail="The selected dates are not valid.",
         ) from exc
 
 

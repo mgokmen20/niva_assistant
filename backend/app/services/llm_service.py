@@ -55,6 +55,32 @@ LLAMA_RUN_URL: Final[str] = (
 )
 _SENTENCE_SPLIT: Final[re.Pattern[str]] = re.compile(r"(?<=[.!?])\s+")
 _SUMMARY_SENTENCES: Final[int] = 2
+_PROMPT_INJECTION: Final[re.Pattern[str]] = re.compile(
+    r"```+"
+    r"|\[/?INST\]"
+    r"|<\|im_start\|>"
+    r"|<\|im_end\|>"
+    r"|###\s*instruction"
+    r"|###\s*response"
+    r"|\b(?:system|human|assistant|user)\s*:",
+    re.IGNORECASE,
+)
+
+
+def strip_prompt_delimiters(value: str) -> str:
+    """Remove chat-role markers without joining separate lines."""
+    return _PROMPT_INJECTION.sub(" ", value).replace("`", " ")
+
+
+def sanitize_prompt_text(value: str) -> str:
+    """Remove prompt-injection markers from wearer text.
+
+    Role labels, instruction fences, and backticks are dropped.
+    Line breaks in a longer context are kept.
+    """
+    cleaned = strip_prompt_delimiters(value)
+    lines = [" ".join(line.split()) for line in cleaned.splitlines()]
+    return "\n".join(line for line in lines if line != "").strip()
 
 
 @dataclass(frozen=True)
@@ -303,7 +329,7 @@ async def request_outfit_summary(
     body = {
         "messages": [
             {"role": "system", "content": prompt},
-            {"role": "user", "content": context},
+            {"role": "user", "content": strip_prompt_delimiters(context)},
         ]
     }
     try:
@@ -322,7 +348,7 @@ async def request_outfit_summary(
     reply = result.get("response")
     if not isinstance(reply, str) or reply.strip() == "":
         return None
-    return reply.strip()
+    return _limit_sentences(reply.strip())
 
 
 def fallback_summary(

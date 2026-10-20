@@ -27,7 +27,9 @@ from ..core.constants import (
 from ..core.exceptions import VoiceUnavailableError
 from ..models.user import User
 from .diurnal import adaptability_sentence, diurnal_context_lines
+from .llm_service import sanitize_prompt_text
 from .calibration import calculate_user_thermal_offset
+from .llm_service import sanitize_prompt_text, strip_prompt_delimiters
 from .recommendation_service import RecommendationService
 from .tts_service import normalize_language, voice_for_language
 from .voice import generate_speech_audio
@@ -517,7 +519,7 @@ def _context_message(
     stored_periods = recommendation.get("diurnal")
     if isinstance(stored_periods, list):
         lines.extend(diurnal_context_lines(stored_periods))
-    lines.append(f"Question: {question}")
+    lines.append(f"Question: {sanitize_prompt_text(question)}")
     return "\n".join(lines)
 
 
@@ -696,7 +698,7 @@ class VoiceChatService:
         body = {
             "messages": [
                 {"role": "system", "content": NIVA_CHAT_SYSTEM_PROMPT},
-                {"role": "user", "content": context},
+                {"role": "user", "content": strip_prompt_delimiters(context)},
             ]
         }
         try:
@@ -715,7 +717,7 @@ class VoiceChatService:
         reply = result.get("response")
         if not isinstance(reply, str) or reply.strip() == "":
             return None
-        return reply.strip()
+        return limit_sentences(reply.strip())
 
     async def _post(
         self,

@@ -1,12 +1,18 @@
 """Niva HTTP application."""
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
+from .api.limiter import limiter
 from .api.v1.api import api_router
+from .core.config import cloudflare_credentials_configured, require_startup_settings
 from .db.schema_sync import (
     ensure_recommendation_history_columns,
     ensure_user_account_columns,
@@ -14,6 +20,8 @@ from .db.schema_sync import (
 )
 from .db.session import get_engine
 from .models import Base
+
+logger = logging.getLogger(__name__)
 
 _LOCAL_FRONTEND_ORIGINS: tuple[str, ...] = (
     "http://localhost:3000",
@@ -30,6 +38,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ``User``, ``UserLocation``, ``RecommendationLog``, and ``FeedbackEntry``
     are registered on ``Base.metadata``. Existing tables are left in place.
     """
+    settings = require_startup_settings()
+    if not cloudflare_credentials_configured(settings):
+        logger.warning(
+            "Cloudflare credentials are not configured. "
+            "Summaries and chat will use the local rule-based engine."
+        )
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -46,6 +60,8 @@ def create_app() -> FastAPI:
         title="Niva Climate & Clothing Assistant API",
         lifespan=lifespan,
     )
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _too_many_requests)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(_LOCAL_FRONTEND_ORIGINS),
@@ -53,8 +69,17 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Outermost: rewrite request.client from X-Forwarded-For before rate limits
+    # and audit logs read it. Trust every peer because Nginx is the only publisher.
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
     app.include_router(api_router, prefix="/api/v1")
     return app
+
+
+def _too_many_requests(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    """Return the same error shape as other API failures."""
+    del request, exc
+    return JSONResponse(status_code=429, content={"detail": "Too many requests."})
 
 
 app = create_app()

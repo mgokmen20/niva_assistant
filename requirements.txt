@@ -11,6 +11,7 @@ argon2-cffi==25.1.0
 python-jose[cryptography]==3.5.0
 python-multipart==0.0.32
 edge-tts==7.3.1
+slowapi==0.1.9
 
 # Testing
 pytest==9.1.1

@@ -4,6 +4,7 @@ Handlers parse the request, call :class:`AdminService`, and map status codes.
 Password hashing and SQL stay in the service layer.
 """
 
+import logging
 from collections.abc import Iterator
 from datetime import date
 from uuid import UUID
@@ -43,6 +44,8 @@ from ...services.analytics import (
 )
 from ...services.auth_service import EmailAlreadyRegisteredError
 from ..deps import get_db, require_admin
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 _admin_service = AdminService()
@@ -232,9 +235,10 @@ def _purge_window(before_date: date | None, start_date: date | None, end_date: d
             end_date=end_date,
         )
     except AnalyticsWindowError as exc:
+        logger.warning("Log purge window was rejected.", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(exc),
+            detail="The selected dates are not valid.",
         ) from exc
 
 

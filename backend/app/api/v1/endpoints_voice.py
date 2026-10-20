@@ -7,7 +7,7 @@ spoken answer. Synthesis and chat stay in the service layer.
 import io
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,10 +17,12 @@ from ...core.exceptions import (
     WeatherAPIUnavailableError,
     WeatherServiceError,
 )
+from ...core.constants import VOICE_ASK_RATE_LIMIT, VOICE_SYNTHESIZE_RATE_LIMIT
 from ...schemas.voice_schema import SpeechRequest, VoiceAnswerResponse, VoiceQuestionRequest
 from ...services.tts_service import voice_for_language
 from ...services.voice import generate_speech_audio
 from ...services.voice_chat import VoiceChatService
+from ..limiter import limiter
 from ..deps import (
     get_current_user_id,
     get_optional_db,
@@ -31,7 +33,9 @@ router = APIRouter(prefix="/voice", tags=["voice"])
 
 
 @router.post("/synthesize")
+@limiter.limit(VOICE_SYNTHESIZE_RATE_LIMIT)
 async def synthesize_speech(
+    request: Request,
     body: SpeechRequest,
     _: UUID = Depends(get_current_user_id),
 ) -> StreamingResponse:
@@ -56,7 +60,9 @@ async def synthesize_speech(
 
 
 @router.post("/ask", response_model=VoiceAnswerResponse)
+@limiter.limit(VOICE_ASK_RATE_LIMIT)
 async def ask_voice_question(
+    request: Request,
     body: VoiceQuestionRequest,
     user_id: UUID = Depends(get_current_user_id),
     chat_service: VoiceChatService = Depends(get_voice_chat_service),

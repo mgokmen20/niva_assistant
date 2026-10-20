@@ -161,8 +161,14 @@ DEFAULT_NEURAL_VOICE: Final[str] = "en-US-ChristopherNeural"
 TURKISH_NEURAL_VOICE: Final[str] = "tr-TR-EmelNeural"
 GERMAN_NEURAL_VOICE: Final[str] = "de-CH-JanNeural"
 SPEECH_TEXT_MAX_LENGTH: Final[int] = 4000
-VOICE_QUESTION_MAX_LENGTH: Final[int] = 500
+VOICE_QUESTION_MAX_LENGTH: Final[int] = 250
 CHAT_ANSWER_MAX_SENTENCES: Final[int] = 2
+SECRET_KEY_MIN_LENGTH: Final[int] = 32
+ASSISTANT_ASK_RATE_LIMIT: Final[str] = "10/minute"
+VOICE_ASK_RATE_LIMIT: Final[str] = "10/minute"
+VOICE_SYNTHESIZE_RATE_LIMIT: Final[str] = "15/minute"
+LOGIN_RATE_LIMIT: Final[str] = "10/minute"
+REGISTER_RATE_LIMIT: Final[str] = "5/minute"
 LLAMA_CHAT_MODEL: Final[str] = "@cf/meta/llama-3.1-8b-instruct"
 LLAMA_CHAT_TIMEOUT_SECONDS: Final[float] = 12.0
 

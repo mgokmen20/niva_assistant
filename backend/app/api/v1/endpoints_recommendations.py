@@ -168,5 +168,9 @@ async def submit_recommendation_feedback(
             followed=body.followed_recommendation,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        logger.warning("Recommendation feedback was rejected.", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The recommendation could not be updated.",
+        ) from exc
     return FeedbackResponse.model_validate(summary)

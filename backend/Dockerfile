@@ -20,4 +20,4 @@ COPY backend /workspace/backend
 EXPOSE 8000
 
 # --reload watches the backend bind mount used in local development.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--app-dir", "backend"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--proxy-headers", "--forwarded-allow-ips", "*", "--app-dir", "backend"]

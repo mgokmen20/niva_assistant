@@ -6,7 +6,7 @@ two-sentence reply and neural audio. Clothing math stays in the service.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.exceptions import (
@@ -15,16 +15,21 @@ from ...core.exceptions import (
     WeatherAPIUnavailableError,
     WeatherServiceError,
 )
+from ...core.constants import ASSISTANT_ASK_RATE_LIMIT
 from ...schemas.assistant_schema import AssistantAnswerResponse, AssistantQuestionRequest
 from ...services.geocoding_service import GeocodingService
+from ...services.llm_service import sanitize_prompt_text
 from ...services.voice_chat import VoiceChatService
 from ..deps import get_current_user_id, get_geocoding_service, get_optional_db, get_voice_chat_service
+from ..limiter import limiter
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
 
 @router.post("/ask", response_model=AssistantAnswerResponse)
+@limiter.limit(ASSISTANT_ASK_RATE_LIMIT)
 async def ask_niva(
+    request: Request,
     body: AssistantQuestionRequest,
     user_id: UUID = Depends(get_current_user_id),
     chat_service: VoiceChatService = Depends(get_voice_chat_service),
@@ -54,7 +59,7 @@ async def ask_niva(
     place = matches[0]
     try:
         payload = await chat_service.answer_in_language(
-            question=body.question,
+            question=sanitize_prompt_text(body.question),
             latitude=float(place["latitude"]),
             longitude=float(place["longitude"]),
             city_name=str(place["name"]),

@@ -10,12 +10,13 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...core.constants import REMEMBER_ME_EXPIRE_DAYS
+from ...core.constants import LOGIN_RATE_LIMIT, REGISTER_RATE_LIMIT, REMEMBER_ME_EXPIRE_DAYS
 from ...core.security import create_access_token, mask_ip_address
 from ...models.user import User
 from ...schemas.auth_schema import TokenResponse, UserRegisterRequest, UserResponse
 from ...services.auth_service import AuthService, EmailAlreadyRegisteredError
 from ..deps import get_current_user, get_db
+from ..limiter import limiter
 
 router = APIRouter(tags=["auth"])
 _auth_service = AuthService()
@@ -26,7 +27,9 @@ _auth_service = AuthService()
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit(REGISTER_RATE_LIMIT)
 async def register_user(
+    request: Request,
     body: UserRegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
@@ -57,6 +60,7 @@ async def register_user(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit(LOGIN_RATE_LIMIT)
 async def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -97,15 +101,8 @@ def _remember_requested(value: str) -> bool:
 
 
 def _masked_client_ip(request: Request) -> str:
-    """Return the nDSG prefix from the forwarding header or the client host."""
-    forwarded = request.headers.get("x-forwarded-for")
-    raw_ip: str | None
-    if forwarded is not None and forwarded.strip() != "":
-        raw_ip = forwarded.split(",")[0].strip()
-    elif request.client is not None:
-        raw_ip = request.client.host
-    else:
-        raw_ip = None
+    """Return the nDSG prefix for the proxy-trusted client address."""
+    raw_ip = request.client.host if request.client is not None else None
     return mask_ip_address(raw_ip) or "unknown"
 
 

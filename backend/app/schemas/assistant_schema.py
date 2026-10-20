@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field, field_validator
 
 from ..core.constants import VOICE_QUESTION_MAX_LENGTH
+from ..services.llm_service import sanitize_prompt_text
 
 
 class AssistantQuestionRequest(BaseModel):
@@ -11,6 +12,14 @@ class AssistantQuestionRequest(BaseModel):
     question: str = Field(min_length=1, max_length=VOICE_QUESTION_MAX_LENGTH)
     city: str = Field(min_length=1, max_length=120)
     lang: str = "en"
+
+    @field_validator("question", mode="before")
+    @classmethod
+    def guard_question(cls, value: object) -> object:
+        """Drop prompt-injection markers before the length check."""
+        if isinstance(value, str):
+            return sanitize_prompt_text(value)
+        return value
 
     @field_validator("question", "city")
     @classmethod

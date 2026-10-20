@@ -8,7 +8,7 @@ from jose.exceptions import ExpiredSignatureError
 
 from app.core.security import create_access_token, hash_password, mask_ip_address, verify_password
 
-_TEST_SECRET = "test-signing-key"
+_TEST_SECRET = "test-signing-key-for-unit-testing-32-chars-long"
 
 
 @pytest.fixture

@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field, field_validator
 
 from ..core.constants import SPEECH_TEXT_MAX_LENGTH, VOICE_QUESTION_MAX_LENGTH
+from ..services.llm_service import sanitize_prompt_text
 
 
 class SpeechRequest(BaseModel):
@@ -37,6 +38,14 @@ class VoiceQuestionRequest(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     city_name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("question", mode="before")
+    @classmethod
+    def guard_question(cls, value: object) -> object:
+        """Drop prompt-injection markers before the length check."""
+        if isinstance(value, str):
+            return sanitize_prompt_text(value)
+        return value
 
     @field_validator("question", "city_name")
     @classmethod

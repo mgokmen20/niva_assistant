@@ -50,6 +50,24 @@ ALLOWED_RISK_LEVELS: Final[frozenset[str]] = frozenset(
 REMOVABLE_MID_LAYER_IDS: Final[frozenset[str]] = frozenset(
     {"light_overshirt", "cardigan", "zip_hoodie"}
 )
+_BASE_WARMTH: Final[dict[str, int]] = {
+    "light_t_shirt": 0,
+    "long_sleeve_base": 1,
+    "thermal_base_layer": 2,
+}
+_MID_WARMTH: Final[dict[str, int]] = {
+    "light_overshirt": 1,
+    "cardigan": 2,
+    "zip_hoodie": 2,
+    "fleece_mid_layer": 3,
+    "insulated_mid_layer": 4,
+}
+_OUTER_WARMTH: Final[dict[str, int]] = {
+    "wind_shell": 1,
+    "light_jacket": 2,
+    "waterproof_shell": 3,
+    "winter_coat": 4,
+}
 RISK_LEVEL_BY_UTCI_CATEGORY: Final[dict[ThermalStressCategory, str]] = {
     ThermalStressCategory.COMFORT: RISK_LEVEL_LOW,
     ThermalStressCategory.SLIGHT_COLD: RISK_LEVEL_LOW,
@@ -344,6 +362,11 @@ def _clef_state(thermal_input: ThermalInput, raw_weather: dict[str, Any]) -> dic
         "uv_index": thermal_input.uv_index,
         "age_years": thermal_input.age,
         "personal_offset_celsius": thermal_input.personal_offset,
+        "effective_temperature_celsius": calculate_effective_temperature(
+            feels_like=thermal_input.feels_like,
+            age=thermal_input.age,
+            personal_offset=thermal_input.personal_offset,
+        ),
         "current_weather": current if isinstance(current, dict) else {},
     }
 
@@ -562,8 +585,74 @@ def _recommendation_from_clef(
         "outer_layer": _garment_choice(answers, "outer_layer", ClothingCategory.OUTER, required=False),
         "accessories": _accessory_choices(answers),
     }
+    _raise_layers_to_rule_warmth(recommendation, thermal_input)
     recommendation["voice_summary"] = _summary_for_observation(recommendation, thermal_input, {})
     return recommendation
+
+
+def _layer_id(layer: object) -> str | None:
+    """Return a garment id when ``layer`` is a garment dictionary."""
+    if not isinstance(layer, dict):
+        return None
+    garment_id = layer.get("id")
+    if not isinstance(garment_id, str) or garment_id == "":
+        return None
+    return garment_id
+
+
+def _warmth(ranks: dict[str, int], layer: object) -> int:
+    """Return the insulation rank of one slot. An empty slot is 0."""
+    garment_id = _layer_id(layer)
+    if garment_id is None:
+        return 0
+    return ranks.get(garment_id, 0)
+
+
+def _raise_layers_to_rule_warmth(recommendation: dict[str, Any], thermal_input: ThermalInput) -> None:
+    """Keep Clef from dressing a feels-like temperature in a lighter outfit.
+
+    Air temperature can sit in a mild band while the apparent temperature
+    is below freezing. Clef may follow the air temperature. Each slot is
+    replaced when the rule engine, which uses the apparent temperature,
+    calls for more insulation. Accessories already chosen by Clef stay,
+    and any colder-weather accessory from the rules is added.
+    """
+    required = determine_clothing_layers(
+        effective_temp=float(recommendation["effective_temperature_celsius"]),
+        wind_speed=thermal_input.wind_speed,
+        rain_prob=thermal_input.rain_prob,
+        uv_index=thermal_input.uv_index,
+        age=thermal_input.age,
+        weather_code=thermal_input.weather_code,
+    )
+    slots = (
+        ("base_layer", _BASE_WARMTH),
+        ("mid_layer", _MID_WARMTH),
+        ("outer_layer", _OUTER_WARMTH),
+    )
+    for slot, ranks in slots:
+        if _warmth(ranks, recommendation.get(slot)) < _warmth(ranks, required[slot]):
+            recommendation[slot] = required[slot]
+    recommendation["accessories"] = _merge_accessories(
+        recommendation.get("accessories"),
+        required["accessories"],
+    )
+
+
+def _merge_accessories(current: object, required: object) -> list[dict[str, Any]]:
+    """Keep the current accessories and append any required id that is missing."""
+    kept: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for source in (current, required):
+        if not isinstance(source, list):
+            continue
+        for item in source:
+            garment_id = _layer_id(item)
+            if garment_id is None or garment_id in seen or not isinstance(item, dict):
+                continue
+            kept.append(item)
+            seen.add(garment_id)
+    return kept
 
 
 def _summary_for_observation(

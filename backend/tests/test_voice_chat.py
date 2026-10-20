@@ -8,7 +8,9 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from app.api.deps import get_voice_chat_service
+from collections.abc import AsyncIterator
+
+from app.api.deps import get_optional_db, get_voice_chat_service
 from app.core.config import Settings
 from app.core.constants import DEFAULT_NEURAL_VOICE, GERMAN_NEURAL_VOICE, TURKISH_NEURAL_VOICE
 from app.core.security import create_access_token
@@ -389,7 +391,11 @@ async def test_ask_endpoint_returns_text_language_and_audio(monkeypatch: pytest.
                 "audio_base64": "bXAz",
             }
 
+    async def no_database() -> AsyncIterator[None]:
+        yield None
+
     app.dependency_overrides[get_voice_chat_service] = lambda: _StubChat()
+    app.dependency_overrides[get_optional_db] = no_database
     monkeypatch.setenv("SECRET_KEY", "valid-long-signing-key-for-pytest-testing-environment-32")
     monkeypatch.setenv("ALGORITHM", "HS256")
     token = create_access_token({"sub": str(uuid4())})

@@ -1,8 +1,10 @@
 """Learn a wearer's comfort offset from recommendation feedback.
 
-A colder rating raises ``cold_sensitivity_offset``, which lowers effective
-temperature and selects more protective clothing next time. A warmer rating
-does the opposite. The stored offset stays inside the feedback bounds.
+``cold_sensitivity_offset`` records the feedback step. A colder rating
+stores a positive step. Clothing does not add that field: the decision
+uses the calibration offset, where feeling cold is negative and is added
+to the apparent temperature. The stored feedback step stays inside the
+feedback bounds.
 """
 
 import math
@@ -48,9 +50,10 @@ class FeedbackService:
 
         ``TOO_COLD`` and ``TOO_WARM`` move a full feedback step (0.5 °C).
         ``SLIGHTLY_COLD`` and ``SLIGHTLY_WARM`` move half a step (0.25 °C).
-        ``PERFECT`` does not move the offset. A positive delta raises the
-        offset so later effective temperatures run colder and clothing
-        becomes more protective.
+        ``PERFECT`` does not move the offset. A positive delta means the
+        wearer reported being cold. The clothing decision does not add
+        this step; calibration applies the opposite sign to the apparent
+        temperature.
 
         Args:
             rating: One of the five thermal rating labels.

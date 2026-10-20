@@ -13,7 +13,6 @@ from typing import Final
 import pytest
 
 from app.core.constants import (
-    CARDIGAN,
     CHILD_COLD_OFFSET_CELSIUS,
     CHILD_UV_PROTECTION_MIN_INDEX,
     FEEDBACK_MAX_OFFSET,
@@ -34,7 +33,6 @@ from app.core.constants import (
     WATERPROOF_SHELL,
     WIND_SHELL,
     WINTER_COAT,
-    ZIP_HOODIE,
     ThermalStressCategory,
 )
 from app.domain.thermal_engine import (
@@ -259,9 +257,8 @@ def test_child_uv_and_removable_layer() -> None:
     """A child at UV 2.6 gets sun protection and a removable mid layer.
 
     Pediatric sun protection starts at UV 2.5, below the adult threshold
-    of 3.0. The temperature is slight cold (5 °C), where a child receives
-    a cardigan or zip hoodie that can be taken off when activity or a
-    warm room reverses heat loss.
+    of 3.0. At 5 °C the child keeps the chilly fleece and can take it off.
+    A lighter mid layer is not substituted for that fleece.
     """
     result = determine_clothing_layers(
         effective_temp=CHILD_SLIGHT_COLD_C,
@@ -277,7 +274,7 @@ def test_child_uv_and_removable_layer() -> None:
     assert mid_layer is not None
     assert mid_layer["removable"] is True
     assert mid_layer["category"] == "MID"
-    assert mid_layer["id"] in {CARDIGAN.id, ZIP_HOODIE.id}
+    assert mid_layer["id"] == FLEECE_MID_LAYER.id
 
 
 def test_effective_temperature_clamps_feedback_bounds() -> None:

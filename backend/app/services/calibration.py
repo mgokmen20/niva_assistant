@@ -1,10 +1,12 @@
 """Turn recent thermal ratings into one clothing decision offset.
 
-The offset is applied as ``T_decision = T_eff + delta_user``. A negative
-value treats the air as colder and selects warmer layers. The running
+The offset is applied as ``T_decision = T_feels_like + delta_user``.
+Feeling cold easily is a negative value, so adding it treats the
+apparent temperature as colder and selects warmer layers. The running
 value starts at the wearer's baseline. Guests stay at 0.0 °C.
 """
 
+from datetime import date
 from uuid import UUID
 
 from sqlalchemy import select
@@ -24,8 +26,11 @@ from ..core.constants import (
     THERMAL_PREFERENCE_COLD_SENSITIVE,
     THERMAL_PREFERENCE_WARM_SENSITIVE,
 )
+from ..domain.thermal_engine import age_in_years
 from ..models.recommendation import FeedbackEntry
 from ..models.user import User
+
+_DEFAULT_ADULT_AGE_YEARS = 30
 
 _RATING_TOO_COLD = "TOO_COLD"
 _RATING_TOO_WARM = "TOO_WARM"
@@ -125,3 +130,24 @@ async def calculate_user_thermal_offset(user_id: UUID, db: AsyncSession) -> floa
     result = await db.execute(statement)
     newest_first = list(result.scalars().all())
     return accumulate_thermal_offset(list(reversed(newest_first)), float(baseline))
+
+
+async def wearer_age_years(user_id: UUID, db: AsyncSession, today: date | None = None) -> int:
+    """Return the wearer's age in whole years, or a standard adult age.
+
+    A missing profile uses 30 years, the same default as the recommendation
+    service. The birth date is never passed through as an age.
+
+    Args:
+        user_id: Authenticated wearer.
+        db: Open async session.
+        today: Calendar day used for the birthday check. Defaults to today.
+
+    Returns:
+        Age in whole years, at least zero.
+    """
+    birth_row = await db.execute(select(User.birth_date).where(User.id == user_id))
+    birth_date = birth_row.scalar_one_or_none()
+    if not isinstance(birth_date, date):
+        return _DEFAULT_ADULT_AGE_YEARS
+    return age_in_years(birth_date, today)

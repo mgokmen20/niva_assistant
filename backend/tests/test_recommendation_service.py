@@ -8,7 +8,13 @@ import httpx
 import pytest
 
 from app.core.config import Settings
-from app.core.constants import STANDARD_CLOTHING_ITEMS, ClothingCategory
+from app.core.constants import (
+    BASELINE_OFFSET_BALANCED_CELSIUS,
+    BASELINE_OFFSET_COLD_SENSITIVE_CELSIUS,
+    CHILD_COLD_OFFSET_CELSIUS,
+    STANDARD_CLOTHING_ITEMS,
+    ClothingCategory,
+)
 from app.domain.thermal_engine import ThermalInput
 from app.services.recommendation_providers import (
     CLEF_REQUEST_TIMEOUT_SECONDS,
@@ -312,3 +318,103 @@ async def test_voice_summary_greets_a_named_wearer_in_the_city() -> None:
     )
     assert guest["voice_summary"].startswith("Hello there!")
     assert "Good morning" not in guest["voice_summary"]
+
+
+def _subzero_observation(*, age: int, personal_offset: float) -> ThermalInput:
+    """Air is mild. The apparent temperature is below freezing."""
+    return ThermalInput(
+        air_temp=13.7,
+        feels_like=-1.5,
+        wind_speed=2.0,
+        rain_prob=0.0,
+        uv_index=1.0,
+        age=age,
+        personal_offset=personal_offset,
+        weather_code=3,
+    )
+
+
+def _insulation_rank(outfit: dict[str, Any]) -> tuple[int, int, int]:
+    """Rank base, mid, and outer so a lighter outfit sorts first."""
+    base_rank = {"light_t_shirt": 0, "long_sleeve_base": 1, "thermal_base_layer": 2}
+    mid_rank = {
+        "light_overshirt": 1,
+        "cardigan": 2,
+        "zip_hoodie": 2,
+        "fleece_mid_layer": 3,
+        "insulated_mid_layer": 4,
+    }
+    outer_rank = {"wind_shell": 1, "light_jacket": 2, "waterproof_shell": 3, "winter_coat": 4}
+
+    def rank(table: dict[str, int], layer: object) -> int:
+        if not isinstance(layer, dict):
+            return 0
+        garment_id = layer.get("id")
+        if not isinstance(garment_id, str):
+            return 0
+        return table.get(garment_id, 0)
+
+    return (
+        rank(base_rank, outfit.get("base_layer")),
+        rank(mid_rank, outfit.get("mid_layer")),
+        rank(outer_rank, outfit.get("outer_layer")),
+    )
+
+
+@pytest.mark.asyncio
+async def test_subzero_feels_like_keeps_a_cold_sensitive_child_at_least_as_warm() -> None:
+    """13.7°C air and -1.5°C feels-like is a freezing outfit for both wearers.
+
+    Feeling cold easily is stored as a negative comfort offset. Adding that
+    offset lowers the decision temperature, so the child is dressed at least
+    as warmly as the balanced adult. The mild air temperature does not
+    select a light jacket.
+    """
+    provider = RuleBasedRecommendationProvider()
+    forecast = _forecast()
+    child = _subzero_observation(age=12, personal_offset=BASELINE_OFFSET_COLD_SENSITIVE_CELSIUS)
+    adult = _subzero_observation(age=40, personal_offset=BASELINE_OFFSET_BALANCED_CELSIUS)
+    younger = _subzero_observation(age=11, personal_offset=BASELINE_OFFSET_COLD_SENSITIVE_CELSIUS)
+    child_outfit = await provider.generate_recommendation(child, forecast)
+    adult_outfit = await provider.generate_recommendation(adult, forecast)
+    younger_outfit = await provider.generate_recommendation(younger, forecast)
+
+    assert child_outfit["effective_temperature_celsius"] == -1.5 + BASELINE_OFFSET_COLD_SENSITIVE_CELSIUS
+    assert adult_outfit["effective_temperature_celsius"] == -1.5
+    assert child_outfit["effective_temperature_celsius"] < adult_outfit["effective_temperature_celsius"]
+    assert younger_outfit["effective_temperature_celsius"] == (
+        -1.5 + BASELINE_OFFSET_COLD_SENSITIVE_CELSIUS - CHILD_COLD_OFFSET_CELSIUS
+    )
+    for outfit in (child_outfit, adult_outfit, younger_outfit):
+        assert outfit["base_layer"]["id"] == "thermal_base_layer"
+        assert outfit["mid_layer"]["id"] == "insulated_mid_layer"
+        assert outfit["outer_layer"]["id"] == "winter_coat"
+    assert _insulation_rank(child_outfit) >= _insulation_rank(adult_outfit)
+    assert _insulation_rank(younger_outfit) >= _insulation_rank(adult_outfit)
+
+
+@pytest.mark.asyncio
+async def test_clef_cannot_replace_subzero_feels_like_with_a_light_jacket() -> None:
+    """A Clef reply that follows the mild air temperature is raised to the rules."""
+    answers = _clef_answers()
+    answers["base_layer"]["choice"] = "light_t_shirt"
+    answers["mid_layer"]["choice"] = "cardigan"
+    answers["outer_layer"]["choice"] = "light_jacket"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_clef_envelope(answers), request=request)
+
+    settings = Settings(CLOUDFLARE_ACCOUNT_ID=_ACCOUNT_ID, CLOUDFLARE_API_TOKEN=_API_TOKEN)
+    client = _RecordingClient(handler)
+    provider = ClefRecommendationProvider(settings=settings, client=client)
+    async with client:
+        result = await provider.generate_recommendation(
+            _subzero_observation(age=40, personal_offset=BASELINE_OFFSET_BALANCED_CELSIUS),
+            _forecast(),
+        )
+
+    assert result["provider"] == "clef"
+    assert result["effective_temperature_celsius"] == -1.5
+    assert result["base_layer"]["id"] == "thermal_base_layer"
+    assert result["mid_layer"]["id"] == "insulated_mid_layer"
+    assert result["outer_layer"]["id"] == "winter_coat"

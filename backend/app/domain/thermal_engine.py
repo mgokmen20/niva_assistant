@@ -22,6 +22,7 @@ Standards consulted by this module:
 
 import math
 from dataclasses import dataclass
+from datetime import date
 from typing import TypedDict
 
 from ..core.constants import (
@@ -69,7 +70,6 @@ from ..core.constants import (
     WIND_SHELL_MIN_MPS,
     WIND_SPEED_MIN_MPS,
     WINTER_COAT,
-    ZIP_HOODIE,
     ClothingBand,
     ClothingItem,
     ThermalStressCategory,
@@ -196,6 +196,21 @@ def _is_child(age: int) -> bool:
     return age < AGE_CHILD_THRESHOLD
 
 
+def age_in_years(birth_date: date, today: date | None = None) -> int:
+    """Return whole years of age on ``today``, never below ``AGE_MIN_YEARS``.
+
+    A birthday later in the year has not been reached yet, so that wearer
+    is one year younger than the calendar-year difference.
+    """
+    current = date.today() if today is None else today
+    years = current.year - birth_date.year
+    if (current.month, current.day) < (birth_date.month, birth_date.day):
+        years -= 1
+    if years < AGE_MIN_YEARS:
+        return AGE_MIN_YEARS
+    return years
+
+
 def _age_cold_offset(age: int) -> float:
     """Return the age compensation subtracted from feels-like temperature.
 
@@ -318,14 +333,11 @@ def _select_outer(
 
 
 def _child_mid_item(band: ClothingBand) -> ClothingItem | None:
-    """Return the removable child mid-layer for a cold clothing band.
+    """Return a child mid layer only when the adult band has none.
 
-    Zip hoodies cover freezing and chilly weather: they still add
-    insulation, and the zipper lets a child shed heat quickly. Mild
-    weather uses a cardigan. Warm and hot bands do not add a mid layer.
+    Mild weather adds a removable cardigan. Freezing and chilly already
+    include a fleece or insulated layer, and that layer is kept.
     """
-    if band in {ClothingBand.FREEZING, ClothingBand.CHILLY}:
-        return ZIP_HOODIE
     if band is ClothingBand.MILD:
         return CARDIGAN
     return None
@@ -336,12 +348,27 @@ def _resolve_mid_layer(
     ensemble: _Ensemble,
     age: int,
 ) -> MidLayerRecommendation | None:
-    """Choose the mid layer, forcing a removable child garment when required."""
-    if _is_child(age):
-        child_mid = _child_mid_item(band)
-        if child_mid is not None:
-            return _mid_layer(child_mid, True)
-    return _mid_layer(ensemble.mid, ensemble.mid_removable)
+    """Choose the mid layer. A child never receives less insulation than an adult.
+
+    The adult ensemble stays in place and is marked removable, so a child
+    can open it when activity raises heat. A lighter child garment is used
+    only when the adult band has no mid layer, which today means a cardigan
+    in mild weather.
+    """
+    adult = _mid_layer(ensemble.mid, ensemble.mid_removable)
+    if not _is_child(age):
+        return adult
+    if adult is not None:
+        return {
+            "id": adult["id"],
+            "label": adult["label"],
+            "category": adult["category"],
+            "removable": True,
+        }
+    child_mid = _child_mid_item(band)
+    if child_mid is not None:
+        return _mid_layer(child_mid, True)
+    return None
 
 
 def _select_accessories(
@@ -436,12 +463,16 @@ def calculate_effective_temperature(
     - 0.0 otherwise
 
     ``feels_like`` is the outdoor apparent temperature (UTCI or an
-    equivalent feels-like index) in degrees Celsius. ``delta_personal``
-    is the wearer comfort offset after clamping to
-    [``FEEDBACK_MIN_OFFSET``, ``FEEDBACK_MAX_OFFSET``], the closed
-    interval required for feedback. ``FEEDBACK_STEP_CELSIUS`` is the
-    increment a wearer uses when adjusting that offset; this function
-    does not round to the step, so a stored value of 0.25 stays 0.25.
+    equivalent feels-like index) in degrees Celsius, never the dry-bulb
+    air temperature. ``delta_personal`` is the wearer comfort offset
+    after clamping to [``FEEDBACK_MIN_OFFSET``, ``FEEDBACK_MAX_OFFSET``].
+    Feeling cold easily is stored as a negative offset, so adding it
+    lowers the decision temperature by that many degrees. That is the
+    same result as subtracting a positive cold-sensitivity magnitude.
+    A positive offset means the wearer runs warm and is dressed more
+    lightly. ``FEEDBACK_STEP_CELSIUS`` is the increment a wearer uses
+    when adjusting that offset; this function does not round to the
+    step, so a stored value of 0.25 stays 0.25.
 
     Subtracting ``delta_age`` treats the same environment as colder and
     selects a warmer ISO 9920 ensemble. For older adults the shift
@@ -527,10 +558,10 @@ def determine_clothing_layers(
     Freezing weather keeps a required adult mid layer. Chilly weather
     always includes both a mid layer and an outer layer. Mild weather
     keeps a light jacket or, for a child, a removable cardigan. Children
-    under ``AGE_CHILD_THRESHOLD`` receive a removable zip hoodie in
-    freezing and chilly weather. Pediatric heat exchange is fast in both
-    directions, so a layer that can be opened matters as much as the extra
-    insulation (Falk, 1998).
+    under ``AGE_CHILD_THRESHOLD`` keep the adult mid layer and may open
+    it. They are not switched to a lighter garment. Pediatric heat
+    exchange is fast in both directions, so a layer that can be opened
+    matters as much as the extra insulation (Falk, 1998).
 
     Accessories:
 

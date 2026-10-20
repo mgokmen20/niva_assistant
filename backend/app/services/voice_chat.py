@@ -28,7 +28,7 @@ from ..core.exceptions import VoiceUnavailableError
 from ..models.user import User
 from .diurnal import adaptability_sentence, diurnal_context_lines
 from .llm_service import sanitize_prompt_text
-from .calibration import calculate_user_thermal_offset
+from .calibration import calculate_user_thermal_offset, wearer_age_years
 from .llm_service import sanitize_prompt_text, strip_prompt_delimiters
 from .recommendation_service import RecommendationService
 from .tts_service import normalize_language, voice_for_language
@@ -569,12 +569,11 @@ class VoiceChatService:
             ``answer_text``, ``language``, and ``audio_base64``. Audio is an
             empty string when speech synthesis cannot run.
         """
-        first_name, gender, personal_offset = await self._profile(user_id, db)
-        # Same inputs as POST /recommendations/current: calibrated offset,
-        # and the adult age default used by that route.
+        first_name, gender, personal_offset, age = await self._profile(user_id, db)
         recommendation = await self._recommendations.get_recommendation(
             latitude=latitude,
             longitude=longitude,
+            age=age,
             personal_offset=personal_offset,
             city_name=city_name,
             first_name=first_name,
@@ -628,10 +627,11 @@ class VoiceChatService:
         sentence inside the two-sentence reply.
         """
         selected = normalize_language(language)
-        first_name, gender, personal_offset = await self._profile(user_id, db)
+        first_name, gender, personal_offset, age = await self._profile(user_id, db)
         recommendation = await self._recommendations.get_recommendation(
             latitude=latitude,
             longitude=longitude,
+            age=age,
             personal_offset=personal_offset,
             city_name=city_name,
             first_name=first_name,
@@ -673,15 +673,16 @@ class VoiceChatService:
         self,
         user_id: UUID | None,
         db: AsyncSession | None,
-    ) -> tuple[str | None, str | None, float]:
-        """Return name, gender, and the same thermal offset the cards use."""
+    ) -> tuple[str | None, str | None, float, int]:
+        """Return name, gender, thermal offset, and age in whole years."""
         if user_id is None or db is None:
-            return None, None, 0.0
+            return None, None, 0.0, 30
         user = await db.get(User, user_id)
         if user is None:
-            return None, None, 0.0
+            return None, None, 0.0, 30
         offset = await calculate_user_thermal_offset(user_id, db)
-        return user.first_name, user.gender, offset
+        age = await wearer_age_years(user_id, db)
+        return user.first_name, user.gender, offset, age
 
     async def _ask_model(self, context: str) -> str | None:
         """Ask Llama for a reply, or return None so the caller can fall back."""

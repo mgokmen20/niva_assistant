@@ -23,7 +23,7 @@ from ...schemas.recommendation_schema import (
     RecommendationResponse,
     clothing_layers_from_payload,
 )
-from ...services.calibration import calculate_user_thermal_offset
+from ...services.calibration import calculate_user_thermal_offset, wearer_age_years
 from ...services.feedback_service import FeedbackService
 from ...services.llm_service import load_wearer_decision_context
 from ...services.tts_service import normalize_language
@@ -112,14 +112,17 @@ async def create_current_recommendation(
     host = request.client.host if request.client is not None else None
     language = normalize_language(lang)
     personal_offset = 0.0
+    age = 30
     wearer_context = None
     if db is not None:
         personal_offset = await calculate_user_thermal_offset(user_id, db)
+        age = await wearer_age_years(user_id, db)
         wearer_context = await load_wearer_decision_context(user_id, db, personal_offset)
     try:
         payload = await recommendation_service.get_recommendation(
             latitude=body.latitude,
             longitude=body.longitude,
+            age=age,
             city_name=body.city_name,
             first_name=body.first_name,
             personal_offset=personal_offset,

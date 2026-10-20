@@ -1,0 +1,49 @@
+# Local Niva stack. The API image matches the deployment runtime.
+# The backend bind mount and uvicorn --reload are for development.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: niva
+      POSTGRES_PASSWORD: niva_dev_secret
+      POSTGRES_DB: niva
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U niva -d niva"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - niva-net
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Hostname "db" is the Postgres service on niva-net.
+      # This value overrides a localhost DATABASE_URL from .env.
+      DATABASE_URL: postgresql+asyncpg://niva:niva_dev_secret@db:5432/niva
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./backend:/workspace/backend
+    networks:
+      - niva-net
+
+networks:
+  niva-net:
+    driver: bridge
+
+volumes:
+  postgres_data:

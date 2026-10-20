@@ -1,0 +1,9 @@
+# Keep local tooling, caches, and secrets out of the image.
+.git
+.venv
+__pycache__
+.pytest_cache
+.env
+frontend/
+docs/
+*.log

@@ -61,6 +61,10 @@ class _MemorySession:
         """Answer calibration lookups with no wearer row."""
         return _EmptyResult()
 
+    async def scalar(self, _statement: object) -> None:
+        """Answer the wearer gender lookup with no stored profile."""
+        return None
+
     async def flush(self) -> None:
         """Pretend the staged rows were sent to the database."""
 
@@ -104,13 +108,13 @@ async def api_client(
         return httpx.Response(200, json=_FORECAST, request=request)
 
     weather_http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    monkeypatch.setenv("SECRET_KEY", "test-signing-key")
+    monkeypatch.setenv("SECRET_KEY", "valid-long-signing-key-for-pytest-testing-environment-32")
     monkeypatch.setenv("ALGORITHM", "HS256")
     settings = Settings(
         CLOUDFLARE_ACCOUNT_ID="",
         CLOUDFLARE_API_TOKEN="",
         DATABASE_URL="",
-        SECRET_KEY="test-signing-key",
+        SECRET_KEY="valid-long-signing-key-for-pytest-testing-environment-32",
         _env_file=None,
     )
     service = RecommendationService.create(
@@ -367,13 +371,13 @@ async def test_travel_plan_packs_the_signed_in_span(
     api_client: tuple[httpx.AsyncClient, _MemorySession],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A bearer receives base layers scaled to the trip and the extreme add-ons."""
+    """A bearer receives one of each needed garment type for the trip extremes."""
     monkeypatch.setattr(
         "app.api.v1.endpoints_travel.get_settings",
         lambda: Settings(
             CLOUDFLARE_ACCOUNT_ID="",
             CLOUDFLARE_API_TOKEN="",
-            SECRET_KEY="test-signing-key",
+            SECRET_KEY="valid-long-signing-key-for-pytest-testing-environment-32",
             _env_file=None,
         ),
     )
@@ -395,11 +399,13 @@ async def test_travel_plan_packs_the_signed_in_span(
     assert response.status_code == 200
     body = response.json()
     quantities = {item["item_id"]: item["quantity"] for item in body["items"]}
-    assert quantities["base_shirt"] == 4
+    assert quantities["base_shirt"] == 1
     assert quantities["fleece"] == 1
     assert quantities["winter_coat"] == 1
     assert quantities["umbrella"] == 1
-    assert "Pack 4 base shirts for Bern" in body["summary"]
+    assert "T-shirt / Base layer" in body["summary"]
+    assert "for Bern" in body["summary"]
+    assert "Waterproof rain shell" in body["summary"]
     assert len(body["days"]) == 4
     assert body["days"][0]["date"] == today.isoformat()
     assert body["days"][0]["wind_speed"] == 5.0

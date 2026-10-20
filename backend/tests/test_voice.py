@@ -19,7 +19,7 @@ from app.services import voice as voice_service
 
 def _bearer(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     """Return a signed bearer header so synthesis is not treated as a guest."""
-    monkeypatch.setenv("SECRET_KEY", "test-signing-key")
+    monkeypatch.setenv("SECRET_KEY", "valid-long-signing-key-for-pytest-testing-environment-32")
     monkeypatch.setenv("ALGORITHM", "HS256")
     token = create_access_token({"sub": str(uuid4())})
     return {"Authorization": f"Bearer {token}"}

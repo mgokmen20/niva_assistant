@@ -29,7 +29,7 @@ _ACCOUNT: dict[str, object] = {
 @pytest_asyncio.fixture
 async def client(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[httpx.AsyncClient]:
     """Serve the app with a fresh SQLite database."""
-    monkeypatch.setenv("SECRET_KEY", "test-signing-key")
+    monkeypatch.setenv("SECRET_KEY", "valid-long-signing-key-for-pytest-testing-environment-32")
     monkeypatch.setenv("ALGORITHM", "HS256")
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",

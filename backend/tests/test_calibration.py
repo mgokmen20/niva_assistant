@@ -161,7 +161,7 @@ async def test_authenticated_recommendation_applies_the_offset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A bearer token lowers the decision temperature after a cold rating."""
-    monkeypatch.setenv("SECRET_KEY", "test-signing-key")
+    monkeypatch.setenv("SECRET_KEY", "valid-long-signing-key-for-pytest-testing-environment-32")
     monkeypatch.setenv("ALGORITHM", "HS256")
     async with session_factory() as session:
         wearer = await _seed_ratings(session, ["TOO_COLD"])
@@ -174,7 +174,7 @@ async def test_authenticated_recommendation_applies_the_offset(
         CLOUDFLARE_ACCOUNT_ID="",
         CLOUDFLARE_API_TOKEN="",
         DATABASE_URL="",
-        SECRET_KEY="test-signing-key",
+        SECRET_KEY="valid-long-signing-key-for-pytest-testing-environment-32",
         _env_file=None,
     )
     service = RecommendationService.create(

@@ -15,7 +15,7 @@ from app.api.deps import get_db
 from app.main import app, lifespan
 from app.models import Base
 
-_SIGNING_KEY = "test-signing-key"
+_SIGNING_KEY = "valid-long-signing-key-for-pytest-testing-environment-32"
 _ACCOUNT: dict[str, str] = {
     "email": "wearer@example.com",
     "password": "correct-horse",

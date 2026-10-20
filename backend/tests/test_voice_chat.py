@@ -134,7 +134,7 @@ async def test_missing_credentials_use_weather_rules(
         settings=Settings(
             CLOUDFLARE_ACCOUNT_ID="",
             CLOUDFLARE_API_TOKEN="",
-            SECRET_KEY="test",
+            SECRET_KEY="valid-long-signing-key-for-pytest-testing-environment-32",
             _env_file=None,
         ),
         http_client=client,
@@ -186,7 +186,7 @@ async def test_wrong_language_model_reply_is_replaced(
         settings=Settings(
             CLOUDFLARE_ACCOUNT_ID="acct",
             CLOUDFLARE_API_TOKEN="token",
-            SECRET_KEY="test",
+            SECRET_KEY="valid-long-signing-key-for-pytest-testing-environment-32",
             _env_file=None,
         ),
         http_client=client,
@@ -261,7 +261,7 @@ async def _spoken_answer(
         settings=Settings(
             CLOUDFLARE_ACCOUNT_ID="",
             CLOUDFLARE_API_TOKEN="",
-            SECRET_KEY="test",
+            SECRET_KEY="valid-long-signing-key-for-pytest-testing-environment-32",
             _env_file=None,
         ),
     )
@@ -354,7 +354,7 @@ async def test_unreachable_model_falls_back_to_weather_rules(
         settings=Settings(
             CLOUDFLARE_ACCOUNT_ID="acct",
             CLOUDFLARE_API_TOKEN="token",
-            SECRET_KEY="test",
+            SECRET_KEY="valid-long-signing-key-for-pytest-testing-environment-32",
             _env_file=None,
         ),
         http_client=client,
@@ -390,7 +390,7 @@ async def test_ask_endpoint_returns_text_language_and_audio(monkeypatch: pytest.
             }
 
     app.dependency_overrides[get_voice_chat_service] = lambda: _StubChat()
-    monkeypatch.setenv("SECRET_KEY", "test-signing-key")
+    monkeypatch.setenv("SECRET_KEY", "valid-long-signing-key-for-pytest-testing-environment-32")
     monkeypatch.setenv("ALGORITHM", "HS256")
     token = create_access_token({"sub": str(uuid4())})
     transport = ASGITransport(app=app)

@@ -38,9 +38,9 @@ def _ids(days: list[TripDay]) -> dict[str, int]:
 
 
 def test_four_mild_days_scale_base_shirts_only() -> None:
-    """A warm dry span packs one shirt per day and nothing else."""
+    """A warm dry span recommends a t-shirt type, not one shirt per day."""
     packed = _ids([_day(f"2026-10-{19 + offset}", 20.0, 26.0, code=3, uv=1.0) for offset in range(4)])
-    assert packed == {ITEM_BASE_SHIRT: 4}
+    assert packed == {ITEM_BASE_SHIRT: 1}
 
 
 def test_cold_wet_clear_span_adds_layers() -> None:
@@ -53,7 +53,7 @@ def test_cold_wet_clear_span_adds_layers() -> None:
             _day("2026-10-22", 18.0, 24.0, rain=0, code=2, uv=4.0),
         ]
     )
-    assert packed[ITEM_BASE_SHIRT] == 4
+    assert packed[ITEM_BASE_SHIRT] == 1
     assert packed[ITEM_FLEECE] == 1
     assert packed[ITEM_WINTER_COAT] == 1
     assert packed[ITEM_LIGHT_JACKET] == 1
@@ -71,10 +71,10 @@ def test_freezing_day_without_a_mild_afternoon_skips_the_light_jacket() -> None:
 
 
 def test_rain_at_thirty_percent_includes_shell_and_umbrella() -> None:
-    """Travel rain uses 30 percent, which is below the daily umbrella cut."""
+    """Thirty percent is an advisory risk: pack an umbrella and leave the shell out."""
     packed = _ids([_day("2026-10-19", 20.0, 24.0, rain=30, code=3, uv=1.0)])
     assert packed[ITEM_UMBRELLA] == 1
-    assert packed[ITEM_WATERPROOF_SHELL] == 1
+    assert ITEM_WATERPROOF_SHELL not in packed
 
 
 def test_trip_window_rejects_a_reversed_or_long_span() -> None:
@@ -90,7 +90,7 @@ def test_trip_window_rejects_a_reversed_or_long_span() -> None:
 @pytest.mark.asyncio
 async def test_german_summary_falls_back_without_credentials() -> None:
     """An empty Cloudflare account keeps the Swiss fallback and drops ß."""
-    settings = Settings(CLOUDFLARE_ACCOUNT_ID="", CLOUDFLARE_API_TOKEN="", SECRET_KEY="test", _env_file=None)
+    settings = Settings(CLOUDFLARE_ACCOUNT_ID="", CLOUDFLARE_API_TOKEN="", SECRET_KEY="valid-long-signing-key-for-pytest-testing-environment-32", _env_file=None)
     days = [_day("2026-10-19", 4.0, 9.0, rain=35, code=1, uv=1.0)]
     items = plan_packing(days)
     summary = await compose_travel_summary(
@@ -100,8 +100,8 @@ async def test_german_summary_falls_back_without_credentials() -> None:
         days=days,
         settings=settings,
     )
-    assert "Basis-Shirts" in summary
-    assert "leichte Jacke" in summary
+    assert "Basisschicht" in summary
+    assert "Leichte Jacke" in summary
     assert "ß" not in summary
     assert not summary.startswith("Pack ")
 
@@ -114,7 +114,7 @@ async def test_turkish_summary_uses_the_model_reply(monkeypatch: pytest.MonkeyPa
         return "Bern için valize tişört ve mont koyun. Yağmur olasılığı yüksek."
 
     monkeypatch.setattr("app.services.travel_engine.request_outfit_summary", reply)
-    settings = Settings(CLOUDFLARE_ACCOUNT_ID="account", CLOUDFLARE_API_TOKEN="token", SECRET_KEY="test", _env_file=None)
+    settings = Settings(CLOUDFLARE_ACCOUNT_ID="account", CLOUDFLARE_API_TOKEN="token", SECRET_KEY="valid-long-signing-key-for-pytest-testing-environment-32", _env_file=None)
     days = [_day("2026-10-19", 8.0, 12.0)]
     summary = await compose_travel_summary(
         city_name="Bern",

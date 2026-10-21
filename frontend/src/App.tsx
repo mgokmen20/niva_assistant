@@ -56,6 +56,7 @@ export default function App() {
   const [invitePurpose, setInvitePurpose] = useState<'recommendation' | 'travel'>('recommendation')
   const [voicePlayToken, setVoicePlayToken] = useState(0)
   const [voiceAutoPlay, setVoiceAutoPlay] = useState(false)
+  const [voiceReply, setVoiceReply] = useState<string | null>(null)
   const summaryLanguage = useRef(language)
 
   const selectLocation = useCallback((next: ActiveLocation) => {
@@ -65,6 +66,11 @@ export default function App() {
     setWeatherLoading(true)
     setWeatherError(null)
     setRecommendError(null)
+  }, [])
+
+  const applyVoiceAnswer = useCallback((text: string) => {
+    setVoiceAutoPlay(false)
+    setVoiceReply(text)
   }, [])
 
   const requestSignIn = useCallback(() => {
@@ -92,6 +98,7 @@ export default function App() {
       .then((payload) => {
         const speak = !readAudioMuted()
         summaryLanguage.current = language
+        setVoiceReply(null)
         setRecommendation(payload)
         setVoiceAutoPlay(speak)
         setVoicePlayToken((current) => current + 1)
@@ -115,6 +122,7 @@ export default function App() {
           return
         }
         summaryLanguage.current = language
+        setVoiceReply(null)
         setRecommendation(payload)
         if (!readAudioMuted()) {
           setVoiceAutoPlay(true)
@@ -276,6 +284,7 @@ export default function App() {
               cityName={location.name}
               token={token}
               onAuthRequired={requestSignIn}
+              onAnswer={applyVoiceAnswer}
             />
           </div>
           <div>
@@ -289,22 +298,24 @@ export default function App() {
             )}
           </div>
         </div>
-        {recommendation !== null && token !== null ? (
+        {(recommendation !== null || voiceReply !== null) && token !== null ? (
           <section
             aria-label="Voice summary and comfort feedback"
             className="grid items-start gap-4 rounded-3xl bg-white/80 p-4 ring-1 ring-slate-200/80 lg:grid-cols-[minmax(0,1.4fr)_minmax(16rem,1fr)]"
           >
             <VoiceSummaryBanner
-              summary={recommendation.voice_summary}
+              summary={voiceReply ?? recommendation?.voice_summary ?? ''}
               token={token}
               language={language}
               autoPlayToken={voicePlayToken}
               autoPlay={voiceAutoPlay}
             />
-            <FeedbackControls
-              recommendationId={recommendation.recommendation_id}
-              onCalibrated={loadRecommendation}
-            />
+            {recommendation !== null ? (
+              <FeedbackControls
+                recommendationId={recommendation.recommendation_id}
+                onCalibrated={loadRecommendation}
+              />
+            ) : null}
           </section>
         ) : null}
         {weather ? (

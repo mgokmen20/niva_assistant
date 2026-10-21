@@ -44,12 +44,11 @@ export interface Dictionary {
     askNivaVoice: string
     listening: string
     stopListening: string
-    askPlaceholder: string
-    askSend: string
     askThinking: string
-    askYou: string
-    askClose: string
     voiceUnsupported: string
+    micDenied: string
+    speechMissed: string
+    offline: string
     audioOn: string
     audioOff: string
     todaysOutfit: string

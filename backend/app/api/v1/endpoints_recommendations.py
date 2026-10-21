@@ -129,6 +129,8 @@ async def create_current_recommendation(
             outfit_preference=body.mode,
             language=language,
             wearer_context=wearer_context,
+            user_id=user_id,
+            db=db,
         )
     except WeatherAPIUnavailableError as exc:
         raise HTTPException(

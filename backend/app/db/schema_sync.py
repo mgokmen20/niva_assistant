@@ -39,6 +39,21 @@ def ensure_recommendation_history_columns(connection: Connection) -> None:
         )
 
 
+def ensure_wardrobe_item_columns(connection: Connection) -> None:
+    """Add availability on wardrobe rows created before the laundry toggle."""
+    inspector = inspect(connection)
+    if "wardrobe_items" not in inspector.get_table_names():
+        return
+    existing = {column["name"] for column in inspector.get_columns("wardrobe_items")}
+    if "is_active" not in existing:
+        active_default = "1" if connection.dialect.name == "sqlite" else "TRUE"
+        connection.execute(
+            text(f"ALTER TABLE wardrobe_items ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT {active_default}")
+        )
+    if "image_url" not in existing:
+        connection.execute(text("ALTER TABLE wardrobe_items ADD COLUMN image_url VARCHAR(500)"))
+
+
 def ensure_user_account_columns(connection: Connection) -> None:
     """Add role-management columns on a database created before RBAC."""
     active_default = "1" if connection.dialect.name == "sqlite" else "TRUE"

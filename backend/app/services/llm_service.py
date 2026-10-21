@@ -29,27 +29,10 @@ from ..core.constants import (
 )
 from ..models.recommendation import FeedbackEntry
 from ..models.user import User
-from .diurnal import diurnal_context_lines
 from .tts_service import normalize_language
 
 logger = logging.getLogger(__name__)
 
-SUMMARY_SYSTEM_PROMPTS: Final[dict[str, str]] = {
-    PREFERRED_LANGUAGE_TR: (
-        "Sen Niva adında samimi ve pratik bir termal giyim asistanısın. "
-        "Kullanıcıya seçilen şehir ve sıcaklık için önerilen kıyafet katmanlarını "
-        "doğal, sıcak ve motive edici bir Türkçe ile 2 kısa cümlede özetle."
-    ),
-    PREFERRED_LANGUAGE_DE: (
-        "Du bist Niva, ein freundlicher Begleiter für thermischen Komfort. "
-        "Fasse die empfohlenen Kleidungsschichten auf Schweizer Hochdeutsch "
-        "(ohne ß, stattdessen ss) in 2 kurzen Sätzen zusammen."
-    ),
-    PREFERRED_LANGUAGE_EN: (
-        "You are Niva, an empathetic companion for thermal comfort. "
-        "Summarize the recommended clothing layers naturally in 2 short sentences."
-    ),
-}
 LLAMA_RUN_URL: Final[str] = (
     "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/" + LLAMA_CHAT_MODEL
 )
@@ -170,20 +153,14 @@ def garment_display_name(item_id: str, language: str) -> str:
 
 
 def system_prompt_for(language: str) -> str:
-    """Return the Workers AI system prompt for ``language``."""
-    return SUMMARY_SYSTEM_PROMPTS[normalize_language(language)]
+    """Return the briefing prompt when no outfit or weather was supplied."""
+    from .ai_service import summary_system_prompt
 
-
-def _rain_gear_selected(recommendation: dict[str, Any]) -> bool:
-    """True when the outfit already includes an umbrella or a waterproof shell."""
-    outer = recommendation.get("outer_layer")
-    outer_id = outer.get("id") if isinstance(outer, dict) else ""
-    if outer_id in {"waterproof_shell", "umbrella"}:
-        return True
-    accessories = recommendation.get("accessories")
-    if not isinstance(accessories, list):
-        return False
-    return any(isinstance(item, dict) and item.get("id") in {"waterproof_shell", "umbrella"} for item in accessories)
+    return summary_system_prompt(
+        language=language,
+        weather_progression="Not provided.",
+        selected_items="No clothing selected.",
+    )
 
 
 def build_decision_context(
@@ -195,39 +172,36 @@ def build_decision_context(
     wind_speed_mps: float,
     rain_probability_percent: float,
     recommendation: dict[str, Any],
-    wearer: WearerDecisionContext | None,
+    user_name: str | None = None,
 ) -> str:
-    """Describe the outfit decision for the model user message.
+    """List the briefing facts for the model user message.
 
     The facts stay in English. The system prompt requires the reply language.
+    Routine and comfort history stay out, so the reply cannot invent a reason.
     """
-    offset = 0.0 if wearer is None else wearer.personal_offset_celsius
-    routine = "unknown" if wearer is None or wearer.environment_routine is None else wearer.environment_routine
-    ratings = "none" if wearer is None or not wearer.recent_ratings else ", ".join(wearer.recent_ratings)
     city = city_name.strip() if isinstance(city_name, str) and city_name.strip() != "" else "unknown"
+    name = user_name.strip() if isinstance(user_name, str) and user_name.strip() != "" else "unknown"
+    from .ai_service import selected_outfit_text, weather_progression_text
+
+    outfit = selected_outfit_text(recommendation)
+    progression = weather_progression_text(
+        recommendation,
+        air_temperature_celsius=air_temperature_celsius,
+        effective_temperature_celsius=effective_temperature_celsius,
+    )
     lines = [
         f"Reply language: {normalize_language(language)}",
-        "Write exactly 2 short sentences in that language only.",
-        "Explain why this outfit was selected. Use the temperature offset, "
-        "daily routine, wind, and recent feedback when they are present.",
-        f"City: {city}",
+        "Write only the greeting, the weather, and the selected outfit.",
+        f"User name: {name}",
+        f"Location: {city}",
         f"Air temperature C: {air_temperature_celsius:.1f}",
         f"Feels-like temperature C: {effective_temperature_celsius:.1f}",
         f"Wind m/s: {wind_speed_mps:.1f}",
         f"Rain probability percent: {rain_probability_percent:.0f}",
-        f"Personal temperature offset delta T C: {offset:+.1f}",
-        f"Daily routine: {routine}",
-        f"Recent thermal feedback oldest first: {ratings}",
-        f"Base layer: {_layer_label(recommendation.get('base_layer'))}",
-        f"Mid layer: {_layer_label(recommendation.get('mid_layer'))}",
-        f"Outer layer: {_layer_label(recommendation.get('outer_layer'))}",
-        f"Accessories: {_accessory_labels(recommendation)}",
+        f"Weather progression: {progression}",
+        f"Selected outfit: {outfit}",
+        "Do not mention activities, routines, or why the clothes were chosen.",
     ]
-    if _rain_gear_selected(recommendation):
-        lines.append("Rain was detected. Mention the umbrella and the waterproof shell.")
-    stored_periods = recommendation.get("diurnal")
-    if isinstance(stored_periods, list):
-        lines.extend(diurnal_context_lines(stored_periods))
     return "\n".join(lines)
 
 
@@ -244,30 +218,46 @@ async def compose_voice_summary(
     wearer: WearerDecisionContext | None,
     settings: Settings | None,
     http_client: httpx.AsyncClient | None = None,
+    user_name: str | None = None,
 ) -> str:
-    """Return a two-sentence summary in ``language``.
+    """Return a short briefing in ``language``.
 
     English without a model reply keeps ``english_summary``, which is the
     deterministic script. German and Turkish always leave that script.
     """
+    from .ai_service import selected_outfit_text, summary_system_prompt, weather_progression_text
+
     selected = normalize_language(language)
-    model_text = await request_outfit_summary(
+    place = city_name.strip() if isinstance(city_name, str) else ""
+    name = user_name.strip() if isinstance(user_name, str) else ""
+    context = build_decision_context(
         language=selected,
-        context=build_decision_context(
+        city_name=city_name,
+        air_temperature_celsius=air_temperature_celsius,
+        effective_temperature_celsius=effective_temperature_celsius,
+        wind_speed_mps=wind_speed_mps,
+        rain_probability_percent=rain_probability_percent,
+        recommendation=recommendation,
+        user_name=name,
+    )
+    model_text = await request_model_reply(
+        system_prompt=summary_system_prompt(
             language=selected,
-            city_name=city_name,
-            air_temperature_celsius=air_temperature_celsius,
-            effective_temperature_celsius=effective_temperature_celsius,
-            wind_speed_mps=wind_speed_mps,
-            rain_probability_percent=rain_probability_percent,
-            recommendation=recommendation,
-            wearer=wearer,
+            weather_progression=weather_progression_text(
+                recommendation,
+                air_temperature_celsius=air_temperature_celsius,
+                effective_temperature_celsius=effective_temperature_celsius,
+            ),
+            selected_items=selected_outfit_text(recommendation),
+            user_name=name,
+            location=place,
         ),
+        user_content=context,
         settings=settings,
         http_client=http_client,
     )
     if model_text is not None:
-        cleaned = _limit_sentences(_swiss_spelling(model_text) if selected == PREFERRED_LANGUAGE_DE else model_text)
+        cleaned = _swiss_spelling(model_text) if selected == PREFERRED_LANGUAGE_DE else model_text.strip()
         if cleaned != "" and _reply_language_ok(cleaned, selected):
             return cleaned
     if selected == PREFERRED_LANGUAGE_EN:
@@ -306,6 +296,50 @@ async def _post(
         )
 
 
+async def request_model_reply(
+    *,
+    system_prompt: str,
+    user_content: str,
+    settings: Settings | None,
+    http_client: httpx.AsyncClient | None = None,
+) -> str | None:
+    """Ask Llama for a raw reply.
+
+    The text is not trimmed to two sentences. Callers that need a short
+    briefing apply that limit themselves. Missing credentials, a failed
+    request, or an empty reply return None.
+    """
+    if settings is None or not cloudflare_credentials_configured(settings):
+        return None
+    account_id = quote(settings.CLOUDFLARE_ACCOUNT_ID.strip(), safe="")
+    token = settings.CLOUDFLARE_API_TOKEN.strip()
+    url = LLAMA_RUN_URL.format(account_id=account_id)
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    body = {
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": strip_prompt_delimiters(user_content)},
+        ]
+    }
+    try:
+        response = await _post(url, headers, body, http_client)
+        response.raise_for_status()
+        payload = response.json()
+    except (httpx.TimeoutException, httpx.HTTPError, ValueError):
+        logger.warning("Cloudflare text generation could not be completed.")
+        return None
+    if not isinstance(payload, dict) or payload.get("success") is False:
+        logger.warning("Cloudflare text generation reported an unsuccessful result.")
+        return None
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return None
+    reply = result.get("response")
+    if not isinstance(reply, str) or reply.strip() == "":
+        return None
+    return reply.strip()
+
+
 async def request_outfit_summary(
     *,
     language: str,
@@ -319,36 +353,16 @@ async def request_outfit_summary(
     ``system_prompt`` replaces the clothing prompt when a caller such as
     the travel planner needs a different two-sentence brief.
     """
-    if settings is None or not cloudflare_credentials_configured(settings):
-        return None
-    account_id = quote(settings.CLOUDFLARE_ACCOUNT_ID.strip(), safe="")
-    token = settings.CLOUDFLARE_API_TOKEN.strip()
-    url = LLAMA_RUN_URL.format(account_id=account_id)
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     prompt = system_prompt if system_prompt is not None and system_prompt.strip() != "" else system_prompt_for(language)
-    body = {
-        "messages": [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": strip_prompt_delimiters(context)},
-        ]
-    }
-    try:
-        response = await _post(url, headers, body, http_client)
-        response.raise_for_status()
-        payload = response.json()
-    except (httpx.TimeoutException, httpx.HTTPError, ValueError):
-        logger.warning("Cloudflare outfit summary could not be completed.")
+    reply = await request_model_reply(
+        system_prompt=prompt,
+        user_content=context,
+        settings=settings,
+        http_client=http_client,
+    )
+    if reply is None:
         return None
-    if not isinstance(payload, dict) or payload.get("success") is False:
-        logger.warning("Cloudflare outfit summary reported an unsuccessful result.")
-        return None
-    result = payload.get("result")
-    if not isinstance(result, dict):
-        return None
-    reply = result.get("response")
-    if not isinstance(reply, str) or reply.strip() == "":
-        return None
-    return _limit_sentences(reply.strip())
+    return _limit_sentences(reply)
 
 
 def fallback_summary(
@@ -374,10 +388,12 @@ def fallback_summary(
     outer_id = outer_id if isinstance(outer_id, str) else ""
     outer = _layer_label(outer_layer)
     if selected == PREFERRED_LANGUAGE_TR:
-        return _turkish_fallback(place, air, feels, windy, outer_id, outer, offset, outdoor)
-    if selected == PREFERRED_LANGUAGE_DE:
-        return _german_fallback(place, air, feels, windy, outer_id, outer, offset, outdoor)
-    return _english_fallback(place, air, feels, windy, outer, offset, outdoor)
+        text = _turkish_fallback(place, air, feels, windy, outer_id, outer, offset, outdoor)
+    elif selected == PREFERRED_LANGUAGE_DE:
+        text = _german_fallback(place, air, feels, windy, outer_id, outer, offset, outdoor)
+    else:
+        text = _english_fallback(place, air, feels, windy, outer, offset, outdoor)
+    return _append_selected_pieces(text, recommendation, selected)
 
 
 def _turkish_outer(item_id: str, label: str) -> str:
@@ -475,6 +491,27 @@ def _english_fallback(
     return f"{first} {second}"
 
 
+def _wardrobe_names(recommendation: dict[str, Any]) -> str:
+    """Join the hybrid stylist's accepted item names."""
+    selection = recommendation.get("wardrobe_selection")
+    if not isinstance(selection, list):
+        return ""
+    names = [name.strip() for name in selection if isinstance(name, str) and name.strip() != ""]
+    return ", ".join(names)
+
+
+def _append_selected_pieces(text: str, recommendation: dict[str, Any], language: str) -> str:
+    """Add the chosen item names to a deterministic briefing."""
+    names = _wardrobe_names(recommendation)
+    if names == "":
+        return text
+    if language == PREFERRED_LANGUAGE_TR:
+        return f"{text} Seçilen parçalar: {names}."
+    if language == PREFERRED_LANGUAGE_DE:
+        return _swiss_spelling(f"{text} Ausgewählt: {names}.")
+    return f"{text} Today's pieces are {names}."
+
+
 def _layer_label(layer: object) -> str:
     """Return a garment label, or ``none`` when that slot is empty."""
     if not isinstance(layer, dict):
@@ -483,16 +520,6 @@ def _layer_label(layer: object) -> str:
     if isinstance(label, str) and label.strip() != "":
         return label.strip()
     return "none"
-
-
-def _accessory_labels(recommendation: dict[str, Any]) -> str:
-    """Join accessory labels, or ``none`` when the list is empty."""
-    accessories = recommendation.get("accessories")
-    if not isinstance(accessories, list):
-        return "none"
-    labels = [_layer_label(item) for item in accessories]
-    names = [label for label in labels if label != "none"]
-    return ", ".join(names) if names else "none"
 
 
 def _format_celsius(value: float) -> str:

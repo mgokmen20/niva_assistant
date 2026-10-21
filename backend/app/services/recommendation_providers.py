@@ -91,6 +91,7 @@ ACCESSORY_WARNINGS: Final[dict[str, str]] = {
     "scarf": "A scarf is worth keeping close.",
     "sunglasses": "Sunglasses would be wise in this light.",
     "sun_hat": "A sun hat will help.",
+    "sunscreen": "Pack sunscreen.",
 }
 
 
@@ -133,6 +134,11 @@ def build_voice_summary(
     if layering is not None:
         sentences.append(layering)
     sentences.extend(_accessory_warnings(recommendation))
+    selected_names = recommendation.get("wardrobe_selection")
+    if isinstance(selected_names, list):
+        names = [name.strip() for name in selected_names if isinstance(name, str) and name.strip() != ""]
+        if names:
+            sentences.append(f"Today's pieces are {', '.join(names)}.")
     preference_line = _preference_sentence(outfit_preference)
     if preference_line is not None:
         sentences.append(preference_line)
@@ -230,10 +236,13 @@ def _layering_sentence(recommendation: dict[str, Any]) -> str | None:
     base = _layer_label(recommendation.get("base_layer"))
     mid = _layer_label(recommendation.get("mid_layer"))
     outer = _layer_label(recommendation.get("outer_layer"))
+    bottom = _layer_label(recommendation.get("bottom"))
     if base is not None:
         pieces.append(f"starting with your {base}")
     if mid is not None:
         pieces.append(f"adding {_article(mid)} {mid}")
+    if bottom is not None:
+        pieces.append(f"with your {bottom}")
     if outer is not None:
         pieces.append(f"grabbing your {outer}")
     if not pieces:
@@ -243,8 +252,11 @@ def _layering_sentence(recommendation: dict[str, Any]) -> str | None:
     elif len(pieces) == 2:
         joined = f"{pieces[0]} and {pieces[1]}"
     else:
-        joined = f"{pieces[0]}, {pieces[1]}, and {pieces[2]}"
-    return f"I recommend {joined} before heading out."
+        joined = f"{', '.join(pieces[:-1])}, and {pieces[-1]}"
+    sentence = f"I recommend {joined} before heading out."
+    if recommendation.get("layer_plan") == "removable":
+        return f"{sentence} You can take the sweater off when it warms up."
+    return sentence
 
 
 def _accessory_warnings(recommendation: dict[str, Any]) -> list[str]:

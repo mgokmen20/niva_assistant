@@ -2,44 +2,44 @@ import { LayoutDashboard, User } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../i18n/useI18n'
 import type { AppView } from '../navigation/useAppView'
-import type { Gender } from '../types/api'
 import { canOpenWorkspace } from '../utils/accountRole'
+
+const ghostLink =
+  'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
+
+const ghostCurrent =
+  'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-md text-sm font-medium text-gray-900 bg-gray-100 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
+
+const signInButton =
+  'shrink-0 whitespace-nowrap rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+
+const signOutButton =
+  'shrink-0 whitespace-nowrap text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-md px-3 py-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600'
 
 /** Header control that opens the dedicated profile page. */
 function ProfileButton({
   label,
   current,
-  profileLabel,
   openLabel,
   onOpenProfile,
+  showIcon,
 }: {
   label: string
   current: boolean
-  profileLabel: string
   openLabel: string
   onOpenProfile: () => void
+  showIcon: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onOpenProfile}
       aria-current={current ? 'page' : undefined}
-      aria-label={current ? `${profileLabel}, ${label}` : `${openLabel} ${label}`}
-      className={`inline-flex min-h-12 max-w-full items-center gap-2 rounded-full px-3 text-sm font-semibold ring-1 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-800 ${
-        current
-          ? 'bg-indigo-800 text-white ring-indigo-800'
-          : 'bg-white text-slate-950 ring-slate-300 hover:bg-indigo-50 hover:ring-indigo-400'
-      }`}
+      aria-label={current ? label : `${openLabel} ${label}`}
+      className={current ? ghostCurrent : ghostLink}
     >
-      <User size={20} aria-hidden="true" />
-      <span className="max-w-36 truncate">{label}</span>
-      <span
-        className={`rounded-full px-2 py-1 text-xs font-semibold ${
-          current ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-950'
-        }`}
-      >
-        {profileLabel}
-      </span>
+      {showIcon ? <User className="hidden lg:block" size={16} aria-hidden="true" /> : null}
+      <span className="max-w-32 truncate whitespace-nowrap">{label}</span>
     </button>
   )
 }
@@ -59,32 +59,19 @@ export function UserNav({
 }) {
   const { user, role, signOut, openAuthModal } = useAuth()
   const { messages } = useI18n()
-  const genderLabel: Record<Gender, string> = {
-    men: messages.profile.men,
-    women: messages.profile.women,
-    neutral: messages.profile.other,
-  }
   const onProfile = view === 'profile'
   const showWorkspace = user !== null && canOpenWorkspace(role)
 
   if (density === 'session') {
     if (user === null) {
       return (
-        <button
-          type="button"
-          onClick={() => openAuthModal()}
-          className="min-h-12 shrink-0 rounded-full bg-indigo-800 px-4 text-sm font-semibold text-white transition hover:bg-indigo-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-800"
-        >
+        <button type="button" onClick={() => openAuthModal()} className={signInButton}>
           {messages.header.signIn}
         </button>
       )
     }
     return (
-      <button
-        type="button"
-        onClick={signOut}
-        className="min-h-12 shrink-0 rounded-full px-3 text-sm font-semibold text-slate-800 ring-1 ring-slate-300 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-800"
-      >
+      <button type="button" onClick={signOut} className={signOutButton}>
         {messages.header.signOut}
       </button>
     )
@@ -92,27 +79,23 @@ export function UserNav({
 
   if (user === null) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex flex-nowrap items-center gap-2">
         <button
           type="button"
           onClick={onOpenTravel}
           aria-current={view === 'travel' ? 'page' : undefined}
-          className="inline-flex min-h-12 items-center rounded-full bg-white px-3 text-sm font-semibold text-slate-950 ring-1 ring-slate-300 hover:bg-indigo-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-800"
+          className={view === 'travel' ? ghostCurrent : ghostLink}
         >
           {messages.header.travel}
         </button>
         <ProfileButton
           label={messages.header.profile}
           current={onProfile}
-          profileLabel={messages.header.profile}
           openLabel={messages.header.openProfile}
           onOpenProfile={onOpenProfile}
+          showIcon={false}
         />
-        <button
-          type="button"
-          onClick={() => openAuthModal()}
-          className="min-h-12 rounded-full bg-indigo-800 px-4 text-sm font-semibold text-white transition hover:bg-indigo-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-800"
-        >
+        <button type="button" onClick={() => openAuthModal()} className={signInButton}>
           {messages.header.signIn}
         </button>
       </div>
@@ -122,16 +105,12 @@ export function UserNav({
   const name = `${user.first_name} ${user.last_name}`.trim()
 
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
+    <div className="flex flex-nowrap items-center justify-end gap-2">
       <button
         type="button"
         onClick={onOpenTravel}
         aria-current={view === 'travel' ? 'page' : undefined}
-        className={`inline-flex min-h-12 items-center rounded-full px-3 text-sm font-semibold ring-1 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-800 ${
-          view === 'travel'
-            ? 'bg-indigo-800 text-white ring-indigo-800'
-            : 'bg-white text-slate-950 ring-slate-300 hover:bg-indigo-50 hover:ring-indigo-400'
-        }`}
+        className={view === 'travel' ? ghostCurrent : ghostLink}
       >
         {messages.header.travel}
       </button>
@@ -140,31 +119,20 @@ export function UserNav({
           type="button"
           onClick={onOpenWorkspace}
           aria-current={view === 'workspace' ? 'page' : undefined}
-          className={`inline-flex min-h-12 items-center gap-2 rounded-full px-3 text-sm font-semibold ring-1 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-800 ${
-            view === 'workspace'
-              ? 'bg-slate-950 text-white ring-slate-950'
-              : 'bg-white text-slate-950 ring-slate-300 hover:bg-slate-100 hover:ring-slate-400'
-          }`}
+          className={view === 'workspace' ? ghostCurrent : ghostLink}
         >
-          <LayoutDashboard size={20} aria-hidden="true" />
+          <LayoutDashboard size={16} aria-hidden="true" />
           {messages.header.workspace}
         </button>
       ) : null}
       <ProfileButton
         label={name || messages.header.profile}
         current={onProfile}
-        profileLabel={messages.header.profile}
         openLabel={messages.header.openProfile}
         onOpenProfile={onOpenProfile}
+        showIcon
       />
-      <span className="outfit-chip inline-flex min-h-8 items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-800">
-        {genderLabel[user.gender]}
-      </span>
-      <button
-        type="button"
-        onClick={signOut}
-        className="min-h-12 rounded-full px-3 text-sm font-semibold text-slate-800 ring-1 ring-transparent transition hover:bg-slate-100 hover:ring-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-800"
-      >
+      <button type="button" onClick={signOut} className={signOutButton}>
         {messages.header.signOut}
       </button>
     </div>

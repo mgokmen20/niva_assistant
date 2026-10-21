@@ -802,11 +802,22 @@ def _as_mapping(value: object) -> dict[str, object]:
 def _garments_in(layers: dict[str, object]) -> list[tuple[str, str]]:
     """Yield garment id and category for each piece in one outfit."""
     found: list[tuple[str, str]] = []
-    for slot, category in _LAYER_SLOTS:
-        piece = layers.get(slot)
-        parsed = _garment_id(piece)
-        if parsed is not None:
-            found.append((parsed, category))
+    tops = layers.get("tops")
+    if isinstance(tops, list):
+        for piece in tops:
+            parsed = _garment_id(piece)
+            if parsed is not None:
+                found.append((parsed, "top"))
+        for slot, category in (("bottom", "bottom"), ("outerwear", "outer")):
+            parsed = _garment_id(layers.get(slot))
+            if parsed is not None:
+                found.append((parsed, category))
+    else:
+        for slot, category in _LAYER_SLOTS:
+            piece = layers.get(slot)
+            parsed = _garment_id(piece)
+            if parsed is not None:
+                found.append((parsed, category))
     accessories = layers.get("accessories")
     if isinstance(accessories, list):
         for piece in accessories:

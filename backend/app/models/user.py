@@ -124,6 +124,7 @@ class User(Base):
     )
 
     locations: Mapped[list["UserLocation"]] = relationship(back_populates="user")
+    wardrobe_items: Mapped[list["WardrobeItem"]] = relationship(back_populates="user")
 
     def __repr__(self) -> str:
         """Return an id-only representation so logs omit personal data."""

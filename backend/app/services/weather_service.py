@@ -20,6 +20,7 @@ from ..core.constants import (
     DIURNAL_EVENING_HOUR,
     DIURNAL_MORNING_HOUR,
     FORECAST_DAY_COUNT,
+    RAIN_UMBRELLA_MIN_PROBABILITY_PERCENT,
     TRAVEL_MAX_DAYS,
 )
 from ..core.exceptions import WeatherAPIUnavailableError, WeatherServiceError
@@ -43,6 +44,8 @@ DAILY_TRAVEL_VARIABLES: Final[str] = (
     f"{DAILY_FORECAST_VARIABLES},uv_index_max,wind_speed_10m_max"
 )
 HOURLY_DIURNAL_VARIABLES: Final[str] = "temperature_2m,weather_code"
+HOURLY_REMAINING_VARIABLES: Final[str] = "temperature_2m,precipitation_probability,weather_code"
+REMAINING_CURRENT_VARIABLES: Final[str] = "temperature_2m,precipitation_probability"
 _DIURNAL_TARGETS: Final[tuple[tuple[str, int], ...]] = (
     ("morning", DIURNAL_MORNING_HOUR),
     ("afternoon", DIURNAL_AFTERNOON_HOUR),
@@ -411,6 +414,46 @@ class WeatherService:
         self._diurnal_cache.put(checked_latitude, checked_longitude, rows)
         return rows
 
+    async def fetch_remaining_day(self, latitude: float, longitude: float) -> dict[str, Any] | None:
+        """Return min, max, and rain for the hours still left today.
+
+        Hours before the local current hour are ignored, so morning rain
+        does not affect an afternoon request. A payload without an hourly
+        block returns None.
+        """
+        checked_latitude = _require_coordinate(
+            "latitude",
+            latitude,
+            LATITUDE_MIN_DEGREES,
+            LATITUDE_MAX_DEGREES,
+        )
+        checked_longitude = _require_coordinate(
+            "longitude",
+            longitude,
+            LONGITUDE_MIN_DEGREES,
+            LONGITUDE_MAX_DEGREES,
+        )
+        params: dict[str, float | str] = {
+            "latitude": checked_latitude,
+            "longitude": checked_longitude,
+            "hourly": HOURLY_REMAINING_VARIABLES,
+            "current": REMAINING_CURRENT_VARIABLES,
+            "forecast_days": "1",
+            "timezone": TIMEZONE_AUTO,
+        }
+        response = await self._request_with_retry(params)
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise WeatherServiceError("Open-Meteo returned a body that is not JSON.") from exc
+        if not isinstance(payload, dict):
+            raise WeatherServiceError("Open-Meteo returned a JSON value that is not an object.")
+        return summarize_remaining_hours(payload)
+
+    def describe_remaining_day(self, summary: dict[str, Any]) -> str:
+        """Turn a remaining-day summary into one briefing clause."""
+        return format_remaining_day(summary)
+
     async def fetch_current_weather(self, latitude: float, longitude: float) -> dict[str, Any]:
         """Return the raw Open-Meteo JSON object for one coordinate.
 
@@ -613,6 +656,100 @@ class WeatherService:
                 params=params,
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
+
+
+def summarize_remaining_hours(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Reduce an hourly forecast to the hours from now until 23:00 local.
+
+    The current hour comes from the Open-Meteo ``current.time`` stamp.
+    Precipitation is the highest chance among those remaining hours.
+    """
+    current = payload.get("current")
+    hourly = payload.get("hourly")
+    if not isinstance(current, dict) or not isinstance(hourly, dict):
+        return None
+    anchor = _hour_stamp(current.get("time"))
+    if anchor is None:
+        return None
+    day, current_hour = anchor
+    times = hourly.get("time")
+    temperatures = hourly.get("temperature_2m")
+    probabilities = hourly.get("precipitation_probability")
+    if not isinstance(times, list) or not isinstance(temperatures, list) or not isinstance(probabilities, list):
+        return None
+    if not (len(times) == len(temperatures) == len(probabilities)):
+        return None
+    rows: list[dict[str, float | int]] = []
+    for index, stamp in enumerate(times):
+        parsed = _hour_stamp(stamp)
+        if parsed is None or parsed[0] != day or parsed[1] < current_hour:
+            continue
+        rows.append(
+            {
+                "hour": parsed[1],
+                "temperature": _finite_number(temperatures[index], "temperature_2m"),
+                "precipitation_probability": _finite_number(probabilities[index], "precipitation_probability"),
+            }
+        )
+    if not rows:
+        return None
+    warmest = max(rows, key=lambda row: (float(row["temperature"]), -int(row["hour"])))
+    coolest = min(rows, key=lambda row: (float(row["temperature"]), int(row["hour"])))
+    wettest = max(rows, key=lambda row: float(row["precipitation_probability"]))
+    current_row = next((row for row in rows if int(row["hour"]) == current_hour), rows[0])
+    rain_row = next(
+        (
+            row
+            for row in rows
+            if float(row["precipitation_probability"]) >= RAIN_UMBRELLA_MIN_PROBABILITY_PERCENT
+        ),
+        None,
+    )
+    return {
+        "current_hour": current_hour,
+        "current_temperature": float(current_row["temperature"]),
+        "min_temp": float(coolest["temperature"]),
+        "min_hour": int(coolest["hour"]),
+        "max_temp": float(warmest["temperature"]),
+        "peak_hour": int(warmest["hour"]),
+        "precipitation_probability": float(wettest["precipitation_probability"]),
+        "rain_hour": None if rain_row is None else int(rain_row["hour"]),
+    }
+
+
+def format_remaining_day(summary: dict[str, Any]) -> str:
+    """Describe the rest of today for the spoken briefing."""
+    current = _whole_degrees(float(summary["current_temperature"]))
+    pieces = [f"Currently {current}°C"]
+    current_hour = int(summary["current_hour"])
+    peak_hour = int(summary["peak_hour"])
+    max_temp = float(summary["max_temp"])
+    min_temp = float(summary["min_temp"])
+    if peak_hour != current_hour and max_temp > float(summary["current_temperature"]):
+        pieces.append(f"reaching {_whole_degrees(max_temp)}°C at {_clock_phrase(peak_hour)}")
+    elif int(summary["min_hour"]) != current_hour and min_temp < float(summary["current_temperature"]):
+        pieces.append(f"falling to {_whole_degrees(min_temp)}°C at {_clock_phrase(int(summary['min_hour']))}")
+    rain_hour = summary.get("rain_hour")
+    if isinstance(rain_hour, int):
+        pieces.append(f"rain expected at {_clock_phrase(rain_hour)}")
+    if len(pieces) == 1:
+        return pieces[0]
+    return ", ".join(pieces)
+
+
+def _whole_degrees(value: float) -> str:
+    """Render a briefing temperature without a trailing decimal."""
+    rounded = round(value, 1)
+    if rounded == int(rounded):
+        return str(int(rounded))
+    return f"{rounded:.1f}"
+
+
+def _clock_phrase(hour: int) -> str:
+    """Speak noon by name and every other hour as HH:00."""
+    if hour == 12:
+        return "noon"
+    return f"{hour:02d}:00"
 
 
 def _diurnal_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:

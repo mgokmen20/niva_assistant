@@ -26,7 +26,7 @@ from ..core.constants import (
 )
 from ..core.exceptions import VoiceUnavailableError
 from ..models.user import User
-from .diurnal import adaptability_sentence, diurnal_context_lines
+from .diurnal import diurnal_context_lines
 from .llm_service import sanitize_prompt_text
 from .calibration import calculate_user_thermal_offset, wearer_age_years
 from .llm_service import sanitize_prompt_text, strip_prompt_delimiters
@@ -275,16 +275,6 @@ def limit_sentences(text: str, maximum: int = CHAT_ANSWER_MAX_SENTENCES) -> str:
     return " ".join(parts[:maximum])
 
 
-def _with_day_shift(text: str, hint: str | None) -> str:
-    """Keep the opening sentence and the day-shift hint inside two sentences."""
-    if hint is None or hint in text:
-        return limit_sentences(text)
-    cleaned = " ".join(text.split())
-    parts = [part for part in _SENTENCE_SPLIT.split(cleaned) if part]
-    opening = parts[0] if parts else cleaned
-    return limit_sentences(f"{opening} {hint}")
-
-
 def _reply_matches_cards(
     answer: str,
     question: str,
@@ -320,12 +310,23 @@ def _garment_fields(layer: object) -> tuple[str, str] | None:
 
 
 def _outfit_items(recommendation: dict[str, Any]) -> list[tuple[str, str]]:
-    """Return base, mid, outer, then every accessory, in card order."""
+    """Return tops, the bottom, outerwear, then every accessory."""
     items: list[tuple[str, str]] = []
-    for key in ("base_layer", "mid_layer", "outer_layer"):
-        fields = _garment_fields(recommendation.get(key))
-        if fields is not None:
-            items.append(fields)
+    tops = recommendation.get("tops")
+    if isinstance(tops, list):
+        for item in tops:
+            fields = _garment_fields(item)
+            if fields is not None:
+                items.append(fields)
+        for key in ("bottom", "outerwear"):
+            fields = _garment_fields(recommendation.get(key))
+            if fields is not None:
+                items.append(fields)
+    else:
+        for key in ("base_layer", "mid_layer", "outer_layer"):
+            fields = _garment_fields(recommendation.get(key))
+            if fields is not None:
+                items.append(fields)
     accessories = recommendation.get("accessories")
     if isinstance(accessories, list):
         for item in accessories:
@@ -577,6 +578,8 @@ class VoiceChatService:
             personal_offset=personal_offset,
             city_name=city_name,
             first_name=first_name,
+            user_id=user_id,
+            db=db,
         )
         context = _context_message(
             question,
@@ -622,9 +625,8 @@ class VoiceChatService:
     ) -> dict[str, str]:
         """Answer in the requested language and speak that reply.
 
-        Hourly morning, afternoon, and evening temperatures are part of
-        the model context. A large daytime swing keeps a removable-layer
-        sentence inside the two-sentence reply.
+        Hourly morning, afternoon, and evening temperatures stay in the
+        model context. The reply uses only the garments already chosen.
         """
         selected = normalize_language(language)
         first_name, gender, personal_offset, age = await self._profile(user_id, db)
@@ -636,6 +638,8 @@ class VoiceChatService:
             city_name=city_name,
             first_name=first_name,
             language=selected,
+            user_id=user_id,
+            db=db,
         )
         context = _context_message(
             question,
@@ -646,21 +650,16 @@ class VoiceChatService:
             personal_offset,
             language=selected,
         )
-        periods = recommendation.get("diurnal")
-        hint = adaptability_sentence(selected, periods if isinstance(periods, list) else [])
         model_text = await self._ask_model(context)
         if model_text is not None:
-            answer_text = _with_day_shift(limit_sentences(model_text), hint)
+            answer_text = limit_sentences(model_text)
         else:
-            answer_text = _with_day_shift(
-                deterministic_answer(
-                    question,
-                    city_name,
-                    recommendation,
-                    first_name=first_name,
-                    language=selected,
-                ),
-                hint,
+            answer_text = deterministic_answer(
+                question,
+                city_name,
+                recommendation,
+                first_name=first_name,
+                language=selected,
             )
         audio_base64 = await self._speak(answer_text, selected)
         return {

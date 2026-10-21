@@ -2,7 +2,7 @@
 
 import type { Gender } from '../types/api'
 
-export type GarmentBadge = 'Base' | 'Mid' | 'Outer' | 'Accessory'
+export type GarmentBadge = 'Top' | 'Bottom' | 'Outerwear' | 'Accessory'
 
 export interface GarmentVisual {
   imageUrl: string
@@ -12,14 +12,12 @@ export interface GarmentVisual {
   protectionTags: readonly string[]
 }
 
-const IMAGE_SIZE = 'auto=format&fit=crop&w=800&h=1000&q=80'
-
-function apparelPhoto(photoId: string): string {
-  return `https://images.unsplash.com/photo-${photoId}?${IMAGE_SIZE}`
+function apparelPhoto(_photoId: string): string {
+  return ''
 }
 
 /** Clean apparel photo used when a garment id is not in the catalog. */
-export const FALLBACK_GARMENT_IMAGE = apparelPhoto('1523381210434-271e8be1f52b')
+export const FALLBACK_GARMENT_IMAGE = ''
 
 interface Tone {
   accentClass: string
@@ -36,19 +34,19 @@ interface CatalogEntry {
 const BASE: Tone = {
   accentClass: 'bg-sky-100 text-sky-950',
   washClass: 'bg-sky-50',
-  badge: 'Base',
+  badge: 'Top',
 }
 
 const MID: Tone = {
   accentClass: 'bg-violet-100 text-violet-950',
   washClass: 'bg-violet-50',
-  badge: 'Mid',
+  badge: 'Top',
 }
 
 const OUTER: Tone = {
-  accentClass: 'bg-indigo-100 text-indigo-950',
-  washClass: 'bg-indigo-50',
-  badge: 'Outer',
+  accentClass: 'bg-blue-100 text-blue-950',
+  washClass: 'bg-blue-50',
+  badge: 'Outerwear',
 }
 
 const ACCESSORY: Tone = {
@@ -186,36 +184,106 @@ const CATALOG: Record<string, CatalogEntry> = {
   ),
 }
 
+const SHIRT_ICON = accessoryArt(
+  '#f0f9ff',
+  '<path d="M48 58l18-14h28l18 14 16 10-12 16-10-6v78H54V78l-10 6-12-16z" fill="#0284c7"/>' +
+    '<path d="M66 48c4 12 24 12 28 0" fill="none" stroke="#e0f2fe" stroke-width="4" stroke-linecap="round"/>',
+)
+
+const PANTS_ICON = accessoryArt(
+  '#f8fafc',
+  '<path d="M52 46h56l-4 108H78l-4-62-4 62H56z" fill="#334155"/>' +
+    '<path d="M80 46v46" stroke="#e2e8f0" stroke-width="3"/>',
+)
+
+const COAT_ICON = accessoryArt(
+  '#eff6ff',
+  '<path d="M50 52l16-12h28l16 12 14 18-12 10-8-6v82H56V74l-8 6-12-10z" fill="#1d4ed8"/>' +
+    '<path d="M80 48v108" stroke="#dbeafe" stroke-width="3"/>' +
+    '<circle cx="92" cy="78" r="3" fill="#dbeafe"/>' +
+    '<circle cx="92" cy="96" r="3" fill="#dbeafe"/>',
+)
+
 const BADGE_BY_CATEGORY: Record<string, GarmentBadge> = {
-  BASE: 'Base',
-  MID: 'Mid',
-  OUTER: 'Outer',
+  BASE: 'Top',
+  MID: 'Top',
+  TOP: 'Top',
+  BOTTOM: 'Bottom',
+  OUTER: 'Outerwear',
+  OUTERWEAR: 'Outerwear',
   ACCESSORY: 'Accessory',
 }
 
+const ICON_BY_ID: Record<string, string> = {
+  umbrella: UMBRELLA_ART,
+  sunglasses: SUNGLASSES_ART,
+  warm_hat: WARM_HAT_ART,
+  beanie: WARM_HAT_ART,
+  gloves: GLOVES_ART,
+  scarf: SCARF_ART,
+  sun_hat: SUN_HAT_ART,
+  sunscreen: SUN_HAT_ART,
+}
+
+function slotBadge(category: string): GarmentBadge {
+  return BADGE_BY_CATEGORY[category.trim().toUpperCase()] ?? 'Top'
+}
+
+function toneFor(badge: GarmentBadge): Tone {
+  if (badge === 'Bottom') {
+    return { accentClass: 'bg-slate-200 text-slate-950', washClass: 'bg-slate-100', badge }
+  }
+  if (badge === 'Outerwear') {
+    return OUTER
+  }
+  if (badge === 'Accessory') {
+    return ACCESSORY
+  }
+  return BASE
+}
+
+/** Minimal vector for a wardrobe category. Never a stock photograph. */
+export function categoryIcon(category: string, garmentId = ''): string {
+  const known = ICON_BY_ID[garmentId]
+  if (known !== undefined) {
+    return known
+  }
+  const badge = slotBadge(category)
+  if (badge === 'Bottom') {
+    return PANTS_ICON
+  }
+  if (badge === 'Outerwear') {
+    return COAT_ICON
+  }
+  if (badge === 'Accessory') {
+    return SUNGLASSES_ART
+  }
+  return SHIRT_ICON
+}
+
 function fallbackVisual(category: string): GarmentVisual {
-  const badge = BADGE_BY_CATEGORY[category.trim().toUpperCase()] ?? 'Accessory'
-  const tone = badge === 'Base' ? BASE : badge === 'Mid' ? MID : badge === 'Outer' ? OUTER : ACCESSORY
+  const badge = slotBadge(category)
   return {
-    ...tone,
-    badge,
-    imageUrl: FALLBACK_GARMENT_IMAGE,
+    ...toneFor(badge),
+    imageUrl: categoryIcon(category),
     protectionTags: ['Everyday'],
   }
 }
 
 export function getGarmentVisual(
   garmentId: string,
-  gender: Gender = 'neutral',
+  _gender: Gender = 'neutral',
   category = '',
 ): GarmentVisual {
   const match = CATALOG[garmentId]
+  const badge = slotBadge(category)
   if (match === undefined) {
     return fallbackVisual(category)
   }
   return {
-    ...match.tone,
-    imageUrl: match.photos[gender],
+    ...toneFor(badge === 'Top' ? match.tone.badge : badge),
+    badge,
+    imageUrl: categoryIcon(category, garmentId),
     protectionTags: match.protectionTags,
   }
 }

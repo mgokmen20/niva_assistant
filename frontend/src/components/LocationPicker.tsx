@@ -1,17 +1,19 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Crosshair } from 'lucide-react'
 import { useI18n } from '../i18n/useI18n'
-import { ApiError, reverseLocation, searchLocations } from '../services/api'
-import type { ActiveLocation, LocationMatch, ReverseLocation } from '../types/api'
+import { ApiError, searchLocations } from '../services/api'
+import type { ActiveLocation, LocationMatch } from '../types/api'
+import { deviceLocationMessage, resolveDeviceLocation } from '../utils/deviceLocation'
 
 interface LocationPickerProps {
-  location: ActiveLocation
+  location: ActiveLocation | null
+  locating: boolean
+  startupNotice: string | null
   onChange: (location: ActiveLocation) => void
 }
 
 const SEARCH_DELAY_MS = 300
 const MIN_QUERY_LENGTH = 2
-const CURRENT_LOCATION_LABEL = 'Current Location'
 const CITY_NAME_MAX_LENGTH = 120
 
 function errorText(error: unknown): string {
@@ -36,23 +38,7 @@ function placeLabel(place: LocationMatch): string {
   return label.length > CITY_NAME_MAX_LENGTH ? label.slice(0, CITY_NAME_MAX_LENGTH) : label
 }
 
-function gpsPlaceName(place: ReverseLocation): string {
-  const region = place.region.trim()
-  const label = region !== '' && region !== place.name ? `${place.name}, ${region}` : place.name
-  return label.length > CITY_NAME_MAX_LENGTH ? label.slice(0, CITY_NAME_MAX_LENGTH) : label
-}
-
-function gpsErrorMessage(error: GeolocationPositionError): string {
-  if (error.code === error.PERMISSION_DENIED) {
-    return 'Location permission was denied. Search for a city instead.'
-  }
-  if (error.code === error.TIMEOUT) {
-    return 'Finding your location took too long. Try again or search for a city.'
-  }
-  return 'Your position could not be determined. Search for a city instead.'
-}
-
-export function LocationPicker({ location, onChange }: LocationPickerProps) {
+export function LocationPicker({ location, locating, startupNotice, onChange }: LocationPickerProps) {
   const { messages } = useI18n()
   const rootRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -147,38 +133,20 @@ export function LocationPicker({ location, onChange }: LocationPickerProps) {
     setGpsError(null)
   }
 
-  async function applyGpsFix(latitude: number, longitude: number) {
-    let name: string
-    try {
-      const place = await reverseLocation(latitude, longitude)
-      name = gpsPlaceName(place)
-    } catch {
-      // A failed lookup still keeps the coordinates, labeled as a fallback.
-      name = CURRENT_LOCATION_LABEL
-    }
-    onChange({ name, lat: latitude, lon: longitude })
-    setGpsPending(false)
-    setQuery('')
-    setOpen(false)
-  }
-
   function useCurrentLocation() {
-    if (!('geolocation' in navigator)) {
-      setGpsError('This browser cannot read your location. Search for a city instead.')
-      return
-    }
     setGpsPending(true)
     setGpsError(null)
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        void applyGpsFix(position.coords.latitude, position.coords.longitude)
-      },
-      (error) => {
+    void resolveDeviceLocation()
+      .then((next) => {
+        onChange(next)
         setGpsPending(false)
-        setGpsError(gpsErrorMessage(error))
-      },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
-    )
+        setQuery('')
+        setOpen(false)
+      })
+      .catch((error: unknown) => {
+        setGpsPending(false)
+        setGpsError(deviceLocationMessage(error))
+      })
   }
 
   return (
@@ -186,7 +154,9 @@ export function LocationPicker({ location, onChange }: LocationPickerProps) {
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="dash-label text-xs font-semibold uppercase tracking-wide text-slate-500">Location</p>
-          <h1 className="truncate text-xl font-semibold leading-tight">{location.name}</h1>
+          <h1 className="truncate text-xl font-semibold leading-tight">
+            {location?.name ?? (locating ? messages.weather.locating : messages.weather.searchCity)}
+          </h1>
         </div>
         <button
           type="button"
@@ -199,9 +169,9 @@ export function LocationPicker({ location, onChange }: LocationPickerProps) {
           <Crosshair aria-hidden="true" size={20} />
         </button>
       </div>
-      {gpsError ? (
+      {gpsError ?? startupNotice ? (
         <p className="rounded-2xl bg-rose-50 px-3 py-3 text-sm font-medium text-rose-900" role="alert">
-          {gpsError}
+          {gpsError ?? startupNotice}
         </p>
       ) : null}
       <label className="sr-only" htmlFor="niva-city-search">

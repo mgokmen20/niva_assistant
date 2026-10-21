@@ -6,8 +6,8 @@ import { ApiError, askNiva } from '../services/api'
 import { readAudioMuted } from '../utils/audioMute'
 
 interface VoiceQueryControlProps {
-  latitude: number
-  longitude: number
+  latitude: number | null
+  longitude: number | null
   cityName: string
   token?: string | null
   onAuthRequired: () => void
@@ -154,6 +154,10 @@ export function VoiceQueryControl({
       showNotice(copy.offline)
       return
     }
+    const place = placeRef.current
+    if (place.latitude === null || place.longitude === null || place.cityName.trim() === '') {
+      return
+    }
     setAsking(true)
     setNotice(null)
     const audio = audioRef.current
@@ -161,7 +165,6 @@ export function VoiceQueryControl({
       audio.pause()
     }
     try {
-      const place = placeRef.current
       const reply = await askNiva(spoken, place.latitude, place.longitude, place.cityName, bearer)
       onAnswer(reply.answer_text)
       if (reply.audio_base64.trim() !== '' && !readAudioMuted() && audio) {

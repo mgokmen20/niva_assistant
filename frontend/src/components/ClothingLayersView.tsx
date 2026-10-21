@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../i18n/useI18n'
 import { garmentLabel } from '../i18n'
 import type { ClothingLayers, Garment, Gender } from '../types/api'
-import { FALLBACK_GARMENT_IMAGE, getGarmentVisual, type GarmentBadge } from '../utils/garmentVisuals'
+import { categoryIcon, getGarmentVisual, type GarmentBadge } from '../utils/garmentVisuals'
 
 interface ClothingLayersViewProps {
   layers: ClothingLayers
@@ -42,26 +42,28 @@ interface LayerCardProps {
 function LayerCard({ garment, gender, isSeniorMode }: LayerCardProps) {
   const { language, messages } = useI18n()
   const visual = getGarmentVisual(garment.id, gender, garment.category)
+  const icon = categoryIcon(garment.category, garment.id)
+  const directImage = garment.image_url?.trim() ?? ''
   const badgeLabel: Record<GarmentBadge, string> = {
-    Base: messages.layers.base,
-    Mid: messages.layers.mid,
-    Outer: messages.layers.outer,
+    Top: messages.layers.top,
+    Bottom: messages.layers.bottom,
+    Outerwear: messages.layers.outerwear,
     Accessory: messages.layers.accessories,
   }
-  const [imageUrl, setImageUrl] = useState(visual.imageUrl)
+  const [imageUrl, setImageUrl] = useState(directImage !== '' ? directImage : icon)
   const tags = garment.removable ? [...visual.protectionTags, 'Removable'] : visual.protectionTags
+  const isIcon = imageUrl.startsWith('data:image/svg')
 
-  const isAccessory = visual.badge === 'Accessory'
   return (
     <article className="flex h-full items-center gap-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200/80">
       <div className={`relative h-[132px] w-[108px] shrink-0 overflow-hidden rounded-xl ${visual.washClass}`}>
         <img
           src={imageUrl}
           alt={garmentLabel(language, garment.id, garment.label)}
-          className={`h-full w-full ${isAccessory ? 'object-contain p-1' : 'object-cover'}`}
+          className={`h-full w-full ${isIcon ? 'object-contain p-2' : 'object-cover'}`}
           onError={() => {
-            if (imageUrl !== FALLBACK_GARMENT_IMAGE) {
-              setImageUrl(FALLBACK_GARMENT_IMAGE)
+            if (imageUrl !== icon) {
+              setImageUrl(icon)
             }
           }}
         />
@@ -85,19 +87,16 @@ function LayerCard({ garment, gender, isSeniorMode }: LayerCardProps) {
   )
 }
 
-function EmptyLayer({ title, status }: { title: string; status: string }) {
-  return (
-    <article className="flex h-full min-h-[132px] items-center gap-3 rounded-xl bg-white/80 p-3 ring-1 ring-slate-200/70">
-      <span className="outfit-chip rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{title}</span>
-      <p className="outfit-label text-slate-600">{status}</p>
-    </article>
-  )
-}
-
 export function ClothingLayersView({ layers, isSeniorMode }: ClothingLayersViewProps) {
   const { gender } = useAuth()
   const { messages } = useI18n()
   const thermalStatus = thermalStatusLabel(layers.utci_category)
+  const cards = [
+    ...layers.tops,
+    ...(layers.bottom ? [layers.bottom] : []),
+    ...(layers.outerwear ? [layers.outerwear] : []),
+    ...layers.accessories,
+  ]
   return (
     <section aria-label="Clothing layers" className="space-y-4 rounded-3xl bg-white/70 p-4 ring-1 ring-slate-200/70 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -107,39 +106,10 @@ export function ClothingLayersView({ layers, isSeniorMode }: ClothingLayersViewP
         </span>
       </div>
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <LayerCard
-          key={`${layers.base_layer.id}-${gender}`}
-          garment={layers.base_layer}
-          gender={gender}
-          isSeniorMode={isSeniorMode}
-        />
-        {layers.mid_layer ? (
+        {cards.map((garment) => (
           <LayerCard
-            key={`${layers.mid_layer.id}-${gender}`}
-            garment={layers.mid_layer}
-            gender={gender}
-            isSeniorMode={isSeniorMode}
-          />
-        ) : (
-          <EmptyLayer title={messages.layers.mid} status={messages.layers.notNeeded} />
-        )}
-        {layers.outer_layer ? (
-          <LayerCard
-            key={`${layers.outer_layer.id}-${gender}`}
-            garment={layers.outer_layer}
-            gender={gender}
-            isSeniorMode={isSeniorMode}
-          />
-        ) : (
-          <EmptyLayer title={messages.layers.outer} status={messages.layers.notNeeded} />
-        )}
-        {layers.accessories.length === 0 ? (
-          <EmptyLayer title={messages.layers.accessories} status={messages.layers.notNeeded} />
-        ) : null}
-        {layers.accessories.map((item) => (
-          <LayerCard
-            key={`${item.id}-${gender}`}
-            garment={item}
+            key={`${garment.id}-${garment.label}-${gender}`}
+            garment={garment}
             gender={gender}
             isSeniorMode={isSeniorMode}
           />

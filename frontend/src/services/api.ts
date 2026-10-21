@@ -25,6 +25,8 @@ import type {
   ThermalPreference,
   UserProfile,
   VoiceAnswer,
+  WardrobeItem,
+  WardrobeItemInput,
   WearerProfile,
 } from '../types/api'
 
@@ -35,6 +37,7 @@ const LOCATIONS_URL = '/api/v1/locations'
 const REVERSE_LOOKUP_TIMEOUT_MS = 5000
 const CURRENT_USER_URL = '/api/v1/auth/me'
 const PROFILE_URL = '/api/v1/profile'
+const WARDROBE_URL = '/api/v1/wardrobe'
 const ANALYTICS_URL = '/api/v1/analytics'
 const ADMIN_USERS_URL = '/api/v1/admin/users'
 const PURGE_URL = '/api/v1/admin/maintenance'
@@ -746,4 +749,95 @@ export async function resetCalibration(token: string): Promise<WearerProfile> {
     throw new ApiError(await errorMessage(response), response.status)
   }
   return asWearerProfile((await response.json()) as WearerProfile)
+}
+
+function isWardrobeItem(value: unknown): value is WardrobeItem {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const row = value as Partial<WardrobeItem>
+  return (
+    typeof row.id === 'string' &&
+    typeof row.user_id === 'string' &&
+    typeof row.category === 'string' &&
+    typeof row.thickness === 'string' &&
+    typeof row.color_name === 'string' &&
+    typeof row.style === 'string' &&
+    typeof row.is_waterproof === 'boolean' &&
+    typeof row.is_active === 'boolean' &&
+    typeof row.item_name === 'string'
+  )
+}
+
+export async function fetchWardrobe(token: string): Promise<WardrobeItem[]> {
+  const response = await fetch(`${WARDROBE_URL}/`, { headers: authHeaders(token) })
+  if (!response.ok) {
+    throw new ApiError(await errorMessage(response), response.status)
+  }
+  const body = (await response.json()) as unknown
+  if (!Array.isArray(body) || !body.every(isWardrobeItem)) {
+    throw new ApiError('Wardrobe response was not a list of clothing items.', response.status)
+  }
+  return body
+}
+
+export async function createWardrobeItem(token: string, input: WardrobeItemInput): Promise<WardrobeItem> {
+  const response = await fetch(`${WARDROBE_URL}/`, {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) {
+    throw new ApiError(await errorMessage(response), response.status)
+  }
+  const body = (await response.json()) as unknown
+  if (!isWardrobeItem(body)) {
+    throw new ApiError('Wardrobe response was not a clothing item.', response.status)
+  }
+  return body
+}
+
+export async function updateWardrobeItem(
+  token: string,
+  itemId: string,
+  input: WardrobeItemInput,
+): Promise<WardrobeItem> {
+  const response = await fetch(`${WARDROBE_URL}/${itemId}`, {
+    method: 'PUT',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) {
+    throw new ApiError(await errorMessage(response), response.status)
+  }
+  const body = (await response.json()) as unknown
+  if (!isWardrobeItem(body)) {
+    throw new ApiError('Wardrobe response was not a clothing item.', response.status)
+  }
+  return body
+}
+
+export async function toggleWardrobeItem(token: string, itemId: string): Promise<WardrobeItem> {
+  const response = await fetch(`${WARDROBE_URL}/${itemId}/toggle-active`, {
+    method: 'PATCH',
+    headers: authHeaders(token),
+  })
+  if (!response.ok) {
+    throw new ApiError(await errorMessage(response), response.status)
+  }
+  const body = (await response.json()) as unknown
+  if (!isWardrobeItem(body)) {
+    throw new ApiError('Wardrobe response was not a clothing item.', response.status)
+  }
+  return body
+}
+
+export async function deleteWardrobeItem(token: string, itemId: string): Promise<void> {
+  const response = await fetch(`${WARDROBE_URL}/${itemId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+  if (!response.ok) {
+    throw new ApiError(await errorMessage(response), response.status)
+  }
 }

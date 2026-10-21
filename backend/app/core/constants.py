@@ -197,10 +197,31 @@ DIURNAL_AFTERNOON_HOUR: Final[int] = 14
 DIURNAL_EVENING_HOUR: Final[int] = 20
 # A day that moves by this much needs a layer the wearer can take off.
 DIURNAL_SWING_MIN_CELSIUS: Final[float] = 6.0
+# Remaining-day swing above this, from chilly into the warm band, adds a
+# T-shirt under a sweater the wearer can remove. A day that stays cold
+# keeps the sweater and one coat only.
+DAILY_VARIANCE_HIGH_ABOVE_C: Final[float] = 8.0
 TRAVEL_MAX_DAYS: Final[int] = 16
 TRAVEL_FLEECE_BELOW_C: Final[float] = 12.0
 TRAVEL_UMBRELLA_MIN_PERCENT: Final[float] = 20.0
 TRAVEL_SHELL_MIN_PERCENT: Final[float] = 40.0
+# Digital wardrobe pool. Shorts and thin cloth are left out below 10 °C.
+# Rain accessories use a stricter cut than the 15 percent umbrella trigger:
+# they are added only when the chance is above 40 percent. Sun accessories
+# are added at UV 5 or in the hot clothing band.
+WARDROBE_LIGHT_GARMENT_BELOW_C: Final[float] = 10.0
+WARDROBE_RAIN_EXTRA_ABOVE_PERCENT: Final[float] = TRAVEL_SHELL_MIN_PERCENT
+WARDROBE_SUN_EXTRA_MIN_UV: Final[float] = 5.0
+STANDARD_WARM_SWEATER_NAME: Final[str] = "Standard Warm Sweater"
+STANDARD_TSHIRT_NAME: Final[str] = "Standard T-Shirt"
+STANDARD_CASUAL_PANTS_NAME: Final[str] = "Standard Casual Pants"
+STANDARD_CASUAL_SHORTS_NAME: Final[str] = "Standard Casual Shorts"
+STANDARD_WINTER_COAT_NAME: Final[str] = "Standard Winter Coat"
+STANDARD_LIGHT_JACKET_NAME: Final[str] = "Standard Light Jacket"
+EXTRA_UMBRELLA_NAME: Final[str] = "Umbrella"
+EXTRA_RAINCOAT_NAME: Final[str] = "Waterproof Raincoat"
+EXTRA_SUNGLASSES_NAME: Final[str] = "Sunglasses"
+EXTRA_SUNSCREEN_NAME: Final[str] = "Sunscreen"
 TRAVEL_CLEAR_WEATHER_CODES: Final[frozenset[int]] = frozenset({0, 1})
 TRAVEL_SNOW_WEATHER_CODES: Final[frozenset[int]] = frozenset({71, 73, 75, 77, 85, 86})
 

@@ -21,6 +21,7 @@ import { useSeniorMode } from './context/SeniorModeContext'
 import { ApiError, fetchCurrentRecommendation, fetchCurrentWeather } from './services/api'
 import type { ActiveLocation, Meteorology, RecommendationResponse } from './types/api'
 import { readStoredLocation, storeLocation } from './utils/activeLocation'
+import { deviceLocationMessage, resolveDeviceLocation } from './utils/deviceLocation'
 import { readAudioMuted } from './utils/audioMute'
 
 function readWorkspaceNotice(): string | null {
@@ -45,9 +46,11 @@ export default function App() {
   const { view, showProfile, showWeather, showWorkspace, showTravel } = useAppView()
   const [accessNotice, setAccessNotice] = useState<string | null>(readWorkspaceNotice)
   const firstName = user?.first_name ?? null
-  const [location, setLocation] = useState<ActiveLocation>(readStoredLocation)
+  const [location, setLocation] = useState<ActiveLocation | null>(null)
+  const [locating, setLocating] = useState(true)
+  const [startupNotice, setStartupNotice] = useState<string | null>(null)
   const [weather, setWeather] = useState<Meteorology | null>(null)
-  const [weatherLoading, setWeatherLoading] = useState(true)
+  const [weatherLoading, setWeatherLoading] = useState(false)
   const [weatherError, setWeatherError] = useState<string | null>(null)
   const [recommendation, setRecommendation] = useState<RecommendationResponse | null>(null)
   const [recommending, setRecommending] = useState(false)
@@ -58,15 +61,28 @@ export default function App() {
   const [voiceAutoPlay, setVoiceAutoPlay] = useState(false)
   const [voiceReply, setVoiceReply] = useState<string | null>(null)
   const summaryLanguage = useRef(language)
+  const userPickedLocation = useRef(false)
 
-  const selectLocation = useCallback((next: ActiveLocation) => {
+  const applyLocation = useCallback((next: ActiveLocation, fromUser: boolean) => {
+    if (fromUser) {
+      userPickedLocation.current = true
+      setStartupNotice(null)
+    }
     setLocation(next)
+    setLocating(false)
     setWeather(null)
     setRecommendation(null)
     setWeatherLoading(true)
     setWeatherError(null)
     setRecommendError(null)
   }, [])
+
+  const selectLocation = useCallback(
+    (next: ActiveLocation) => {
+      applyLocation(next, true)
+    },
+    [applyLocation],
+  )
 
   const applyVoiceAnswer = useCallback((text: string) => {
     setVoiceAutoPlay(false)
@@ -92,6 +108,9 @@ export default function App() {
       setInviteOpen(true)
       return
     }
+    if (location === null) {
+      return
+    }
     setRecommending(true)
     setRecommendError(null)
     void fetchCurrentRecommendation(location.lat, location.lon, location.name, firstName, token, language)
@@ -112,7 +131,7 @@ export default function App() {
   }, [firstName, language, location, token])
 
   useEffect(() => {
-    if (token === null || recommendation === null || summaryLanguage.current === language) {
+    if (token === null || location === null || recommendation === null || summaryLanguage.current === language) {
       return
     }
     let active = true
@@ -138,8 +157,35 @@ export default function App() {
   }, [firstName, language, location, recommendation, token])
 
   useEffect(() => {
-    storeLocation(location)
+    if (location !== null) {
+      storeLocation(location)
+    }
   }, [location])
+
+  useEffect(() => {
+    let active = true
+    void resolveDeviceLocation()
+      .then((next) => {
+        if (!active || userPickedLocation.current) {
+          return
+        }
+        applyLocation(next, false)
+      })
+      .catch((error: unknown) => {
+        if (!active || userPickedLocation.current) {
+          return
+        }
+        setLocating(false)
+        setStartupNotice(deviceLocationMessage(error))
+        const stored = readStoredLocation()
+        if (stored !== null) {
+          applyLocation(stored, false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [applyLocation])
 
   useEffect(() => {
     const syncNotice = () => {
@@ -166,6 +212,9 @@ export default function App() {
   }, [role, sessionReady, view])
 
   useEffect(() => {
+    if (location === null) {
+      return
+    }
     let active = true
     void fetchCurrentWeather(location.lat, location.lon)
       .then((payload) => {
@@ -212,7 +261,7 @@ export default function App() {
           </p>
         ) : null}
         {view === 'workspace' && sessionReady && canOpenWorkspace(role) ? (
-          <AdminWorkspace suggestedCity={location.name} onExit={showWeather} />
+          <AdminWorkspace suggestedCity={location?.name ?? ''} onExit={showWeather} />
         ) : null}
         {view === 'profile' ? <ProfilePage key={token ?? 'guest'} onBack={showWeather} /> : null}
         {view === 'travel' && token !== null ? <TravelPlanner /> : null}
@@ -235,8 +284,13 @@ export default function App() {
         ) : null}
         <div className="grid items-start gap-3 md:gap-5 lg:grid-cols-2">
           <div className="space-y-3 md:space-y-4">
-            <LocationPicker location={location} onChange={selectLocation} />
-            {weatherLoading ? (
+            <LocationPicker
+              location={location}
+              locating={locating}
+              startupNotice={startupNotice}
+              onChange={selectLocation}
+            />
+            {weatherLoading && location !== null ? (
               <p className="rounded-3xl bg-white px-4 py-8 text-center text-slate-600 shadow-sm ring-1 ring-slate-200/80" role="status">
                 {messages.weather.checking(location.name)}
               </p>
@@ -247,7 +301,11 @@ export default function App() {
                 <p className="mt-2 text-sm text-rose-800">{weatherError}</p>
                 <button
                   type="button"
-                  onClick={() => selectLocation(location)}
+                  onClick={() => {
+                    if (location !== null) {
+                      selectLocation(location)
+                    }
+                  }}
                   className="mt-4 min-h-12 w-full rounded-md border border-blue-600 bg-blue-600 px-4 font-semibold text-white shadow-sm transition duration-150 hover:bg-blue-700"
                 >
                   {messages.weather.tryAgain}
@@ -279,9 +337,9 @@ export default function App() {
               </p>
             ) : null}
             <VoiceQueryControl
-              latitude={location.lat}
-              longitude={location.lon}
-              cityName={location.name}
+              latitude={location?.lat ?? null}
+              longitude={location?.lon ?? null}
+              cityName={location?.name ?? ''}
               token={token}
               onAuthRequired={requestSignIn}
               onAnswer={applyVoiceAnswer}
@@ -318,7 +376,7 @@ export default function App() {
             ) : null}
           </section>
         ) : null}
-        {weather ? (
+        {weather && location !== null ? (
           <SevenDayForecast key={`${location.lat},${location.lon}`} latitude={location.lat} longitude={location.lon} />
         ) : null}
         </>

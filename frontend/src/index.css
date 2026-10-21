@@ -41,7 +41,8 @@ body {
 .senior-mode [role='dialog'] label,
 .senior-mode .profile-page label,
 .senior-mode .profile-page button,
-.senior-mode .profile-page input {
+.senior-mode .profile-page input,
+.senior-mode .profile-page select {
   min-height: 48px;
   min-width: 48px;
   font-size: 20px;

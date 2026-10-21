@@ -4,6 +4,7 @@ from .base import Base
 from .recommendation import FeedbackEntry, RecommendationLog
 from .trip import UserTrip
 from .user import User, UserLocation
+from .wardrobe import WardrobeItem
 
 __all__ = [
     "Base",
@@ -12,4 +13,5 @@ __all__ = [
     "User",
     "UserLocation",
     "UserTrip",
+    "WardrobeItem",
 ]

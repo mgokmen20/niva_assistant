@@ -70,12 +70,13 @@ export interface Garment {
   label: string
   category: string
   removable?: boolean | null
+  image_url?: string | null
 }
 
 export interface ClothingLayers {
-  base_layer: Garment
-  mid_layer: Garment | null
-  outer_layer: Garment | null
+  tops: Garment[]
+  bottom: Garment | null
+  outerwear: Garment | null
   accessories: Garment[]
   risk_level: string
   utci_category: string
@@ -146,6 +147,34 @@ export type ThermalPreference = 'cold_sensitive' | 'balanced' | 'warm_sensitive'
 export type EnvironmentRoutine = 'mostly_indoor' | 'mostly_outdoor'
 
 export type PreferredLanguage = 'en' | 'de' | 'tr'
+
+export type WardrobeCategory = 'T-Shirt' | 'Sweater' | 'Pants' | 'Outerwear' | 'Shorts' | 'Accessory'
+export type WardrobeThickness = 'Thin' | 'Normal' | 'Thick' | 'Thermal'
+export type WardrobeStyle = 'Casual' | 'Sport' | 'Formal' | 'Outdoor'
+export type WardrobeColor = 'Black' | 'Blue' | 'Red' | 'White' | 'Green' | 'Navy' | 'Grey'
+
+export interface WardrobeItem {
+  id: string
+  user_id: string
+  category: WardrobeCategory
+  thickness: WardrobeThickness
+  color_name: string
+  style: WardrobeStyle
+  is_waterproof: boolean
+  is_active: boolean
+  item_name: string
+  image_url: string | null
+}
+
+export interface WardrobeItemInput {
+  category: WardrobeCategory
+  thickness: WardrobeThickness
+  color_name: WardrobeColor
+  style: WardrobeStyle
+  is_waterproof: boolean
+  item_name: string
+  image_url?: string | null
+}
 
 export interface WearerProfile extends UserProfile {
   phone_number: string | null

@@ -11,6 +11,7 @@ from .endpoints_profile import router as profile_router
 from .endpoints_recommendations import router as recommendations_router
 from .endpoints_travel import router as travel_router
 from .endpoints_voice import router as voice_router
+from .endpoints_wardrobe import router as wardrobe_router
 from .endpoints_weather import router as weather_router
 
 api_router = APIRouter()
@@ -24,3 +25,4 @@ api_router.include_router(voice_router)
 api_router.include_router(assistant_router)
 api_router.include_router(weather_router)
 api_router.include_router(travel_router)
+api_router.include_router(wardrobe_router)

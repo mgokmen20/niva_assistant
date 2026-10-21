@@ -6,9 +6,9 @@ import httpx
 import pytest
 
 from app.core.config import Settings
-from app.core.constants import PREFERRED_LANGUAGE_DE, PREFERRED_LANGUAGE_EN, PREFERRED_LANGUAGE_TR
+from app.core.constants import PREFERRED_LANGUAGE_DE, PREFERRED_LANGUAGE_EN
+from app.services.ai_service import summary_system_prompt
 from app.services.llm_service import (
-    SUMMARY_SYSTEM_PROMPTS,
     WearerDecisionContext,
     build_decision_context,
     compose_voice_summary,
@@ -21,20 +21,48 @@ _TOKEN = "llm-token-value"
 
 
 def test_system_prompts_match_the_three_languages() -> None:
-    """Each language keeps the required Workers AI system prompt."""
-    assert system_prompt_for("tr-TR") == (
-        "Sen Niva adında samimi ve pratik bir termal giyim asistanısın. "
-        "Kullanıcıya seçilen şehir ve sıcaklık için önerilen kıyafet katmanlarını "
-        "doğal, sıcak ve motive edici bir Türkçe ile 2 kısa cümlede özetle."
+    """The briefing prompt names the wearer, the place, and the exact outfit."""
+    german = summary_system_prompt(
+        language=PREFERRED_LANGUAGE_DE,
+        weather_progression="Currently 10°C, reaching 18°C at noon.",
+        selected_items="Hose, Pullover",
+        user_name="Ada",
+        location="Bern",
     )
-    assert system_prompt_for(PREFERRED_LANGUAGE_DE) == SUMMARY_SYSTEM_PROMPTS[PREFERRED_LANGUAGE_DE]
-    assert "ß" in SUMMARY_SYSTEM_PROMPTS[PREFERRED_LANGUAGE_DE]
-    assert system_prompt_for("en-US") == SUMMARY_SYSTEM_PROMPTS[PREFERRED_LANGUAGE_EN]
-    assert system_prompt_for("fr") == SUMMARY_SYSTEM_PROMPTS[PREFERRED_LANGUAGE_EN]
+    assert german.startswith("You are Niva, a premium digital wardrobe assistant.")
+    assert "in German/DE." in german
+    assert "User Name: Ada" in german
+    assert "Location: Bern" in german
+    assert "Weather Progression: Currently 10°C, reaching 18°C at noon." in german
+    assert "Selected Outfit: Hose, Pullover" in german
+    assert "indoor activities" in german
+    assert "Grüezi Ada" in german
+    assert "Hello Ada" in german
+    assert "Do not guess the time of day." in german
+    assert "Good morning" not in german
+    assert "NOT 'Kot Pantolon'" in german
+    assert "NOT 'Light Jacke'" in german
+    assert "Die heutige Kleidungsempfehlung:" in german
+    assert "Pants/Trousers (Pantolon)" in german
+    assert "You do not choose clothes." in german
+    assert "CRITICAL ITEM RULE" in german
+    assert "locked, immutable data" in german
+    assert "Şemsiye" in german
+    assert "Regenschirm" in german
+    assert "NEVER translate 'Umbrella' to 'Gözlük'" in german
+    assert "Do not deviate from this concise structure." in german
+    assert "full-zip fleece" not in german
+    assert "Sabah" not in german
+    assert system_prompt_for("en-US") == summary_system_prompt(
+        language=PREFERRED_LANGUAGE_EN,
+        weather_progression="Not provided.",
+        selected_items="No clothing selected.",
+    )
+    assert "in English." in system_prompt_for("fr")
 
 
-def test_decision_context_includes_offset_routine_and_feedback() -> None:
-    """The model sees why the outfit changed, not only the garment names."""
+def test_decision_context_lists_facts_without_a_routine() -> None:
+    """The model sees the outfit and the weather, not a reason to invent one."""
     context = build_decision_context(
         language="tr",
         city_name="Bern",
@@ -48,16 +76,16 @@ def test_decision_context_includes_offset_routine_and_feedback() -> None:
             "outer_layer": {"id": "light_jacket", "label": "Light jacket"},
             "accessories": [],
         },
-        wearer=WearerDecisionContext(
-            personal_offset_celsius=-1.5,
-            environment_routine="mostly_outdoor",
-            recent_ratings=("TOO_COLD", "PERFECT"),
-        ),
+        user_name="Ada",
     )
-    assert "Personal temperature offset delta T C: -1.5" in context
-    assert "Daily routine: mostly_outdoor" in context
-    assert "Recent thermal feedback oldest first: TOO_COLD, PERFECT" in context
-    assert "Outer layer: Light jacket" in context
+    assert "User name: Ada" in context
+    assert "Location: Bern" in context
+    assert "Daily routine:" not in context
+    assert "Personal temperature offset" not in context
+    assert "thermal feedback" not in context
+    assert "Selected outfit: Long-sleeve base layer, Fleece mid-layer, Light jacket" in context
+    assert "Mid layer:" not in context
+    assert "Outer layer:" not in context
     assert "Wind m/s: 6.0" in context
 
 
@@ -107,8 +135,12 @@ async def test_compose_uses_the_model_reply_in_the_requested_language() -> None:
         )
 
     assert summary.startswith("10°C olmasına rağmen")
-    assert seen["system"] == SUMMARY_SYSTEM_PROMPTS[PREFERRED_LANGUAGE_TR]
-    assert "delta T C: -1.5" in str(seen["user"])
+    assert "in Turkish." in str(seen["system"])
+    assert "Selected Outfit: Light jacket" in str(seen["system"])
+    assert "Location: Bern" in str(seen["system"])
+    assert "indoor activities" in str(seen["system"])
+    assert "Mid layer:" not in str(seen["user"])
+    assert "Daily routine:" not in str(seen["user"])
     assert _TOKEN not in json.dumps(seen)
 
 

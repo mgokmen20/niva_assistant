@@ -17,6 +17,7 @@ from .db.schema_sync import (
     ensure_recommendation_history_columns,
     ensure_user_account_columns,
     ensure_user_profile_columns,
+    ensure_wardrobe_item_columns,
 )
 from .db.session import get_engine
 from .models import Base
@@ -35,8 +36,10 @@ _LOCAL_FRONTEND_ORIGINS: tuple[str, ...] = (
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Create ORM tables before the application serves traffic.
 
-    ``User``, ``UserLocation``, ``RecommendationLog``, and ``FeedbackEntry``
-    are registered on ``Base.metadata``. Existing tables are left in place.
+    ``User``, ``UserLocation``, ``RecommendationLog``, ``FeedbackEntry``,
+    ``UserTrip``, and ``WardrobeItem`` are registered on ``Base.metadata``.
+    Existing tables are left in place. New installs create ``wardrobe_items``
+    here. This project does not use Alembic.
     """
     settings = require_startup_settings()
     if not cloudflare_credentials_configured(settings):
@@ -50,6 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await conn.run_sync(ensure_user_profile_columns)
         await conn.run_sync(ensure_user_account_columns)
         await conn.run_sync(ensure_recommendation_history_columns)
+        await conn.run_sync(ensure_wardrobe_item_columns)
     app.state.database_ready = True
     yield
 

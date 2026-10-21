@@ -162,7 +162,10 @@ async def test_post_current_recommendation_returns_ok(
     assert body["personal_offset"] == 0.0
     assert body["meteorology"]["air_temperature"] == 21.5
     assert body["meteorology"]["wind_speed"] == 5.0
-    assert body["clothing_layers"]["base_layer"]["id"] == "light_t_shirt"
+    assert body["clothing_layers"]["tops"][0]["id"] == "standard_t_shirt"
+    assert body["clothing_layers"]["bottom"]["id"] == "standard_casual_pants"
+    assert body["clothing_layers"]["outerwear"]["id"] == "standard_light_jacket"
+    assert "base_layer" not in body["clothing_layers"]
     assert body["voice_summary"]
     assert len(memory_db.added) == 1
     log = memory_db.added[0]
@@ -172,7 +175,7 @@ async def test_post_current_recommendation_returns_ok(
     assert log.client_ip_masked in {"127.0.0.0", "unknown"}
     assert log.user_id is not None
     assert log.temperature_band == ANALYTICS_BUCKET_ABOVE_15
-    assert log.recommended_layers["base_layer"]["id"] == "light_t_shirt"
+    assert log.recommended_layers["tops"][0]["id"] == "standard_t_shirt"
     assert body["recommendation_id"] == str(log.id)
 
 
@@ -234,7 +237,7 @@ async def test_post_current_recommendation_rejects_invalid_coordinates(
 async def test_warm_preference_shifts_temperature_and_adds_insulation(
     api_client: tuple[httpx.AsyncClient, _MemorySession],
 ) -> None:
-    """Warm mode lowers the decision temperature and adds a jacket, hat, and gloves."""
+    """Warm mode lowers the decision temperature and keeps a jacket in the outfit."""
     client, _memory_db = api_client
     response = await client.post(
         "/api/v1/recommendations/current",
@@ -252,9 +255,11 @@ async def test_warm_preference_shifts_temperature_and_adds_insulation(
     assert body["effective_temperature"] == 17.0
     assert body["personal_offset"] == 0.0
     assert body["meteorology"]["air_temperature"] == 21.5
-    assert body["clothing_layers"]["outer_layer"]["id"] == "waterproof_shell"
-    accessory_ids = {item["id"] for item in body["clothing_layers"]["accessories"]}
-    assert {"warm_hat", "gloves", "umbrella"} <= accessory_ids
+    assert body["clothing_layers"]["tops"][0]["id"] == "standard_t_shirt"
+    assert len(body["clothing_layers"]["tops"]) == 1
+    assert body["clothing_layers"]["bottom"]["id"] == "standard_casual_pants"
+    assert body["clothing_layers"]["outerwear"]["id"] == "standard_light_jacket"
+    assert body["clothing_layers"]["bottom"]["category"] == "BOTTOM"
     assert "warmer outfit" in body["voice_summary"]
     assert "feels like 17°C" in body["voice_summary"]
 
@@ -279,9 +284,9 @@ async def test_light_preference_raises_the_decision_temperature(
     assert response.status_code == 200
     body = response.json()
     assert body["effective_temperature"] == 21.0
-    assert body["clothing_layers"]["base_layer"]["id"] == "light_t_shirt"
-    assert body["clothing_layers"]["mid_layer"] is None
-    assert body["clothing_layers"]["outer_layer"]["id"] == "waterproof_shell"
+    assert body["clothing_layers"]["tops"][0]["id"] == "standard_t_shirt"
+    assert len(body["clothing_layers"]["tops"]) == 1
+    assert body["clothing_layers"]["outerwear"]["id"] == "standard_light_jacket"
     assert "lighter outfit" in body["voice_summary"]
     assert "feels like 21°C" in body["voice_summary"]
 

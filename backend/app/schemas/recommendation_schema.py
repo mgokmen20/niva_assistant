@@ -91,15 +91,16 @@ class Garment(BaseModel):
     label: str
     category: str
     removable: bool | None = None
+    image_url: str | None = None
 
 
 class ClothingLayers(BaseModel):
-    """Layered outfit returned by a recommendation provider."""
+    """Outfit grouped as tops, one bottom, one outer layer, and accessories."""
 
-    base_layer: Garment
-    mid_layer: Garment | None = None
-    outer_layer: Garment | None = None
-    accessories: list[Garment]
+    tops: list[Garment] = Field(default_factory=list)
+    bottom: Garment | None = None
+    outerwear: Garment | None = None
+    accessories: list[Garment] = Field(default_factory=list)
     risk_level: str
     utci_category: str
 
@@ -124,13 +125,34 @@ class FeedbackResponse(BaseModel):
 
 
 def clothing_layers_from_payload(payload: dict[str, Any]) -> ClothingLayers:
-    """Map a provider dictionary onto the clothing-layers DTO."""
+    """Map a provider dictionary onto top, bottom, and outerwear slots.
+
+    A wardrobe outfit already uses those slots. A rule-engine outfit still
+    stores a base layer and an optional mid layer, and both become tops.
+    Empty slots are omitted so the client does not render a placeholder.
+    """
+    stored_tops = payload.get("tops")
+    if isinstance(stored_tops, list):
+        tops = [item for item in stored_tops if isinstance(item, dict)]
+        bottom = payload.get("bottom") if isinstance(payload.get("bottom"), dict) else None
+        outerwear = payload.get("outerwear")
+        if not isinstance(outerwear, dict):
+            outerwear = payload.get("outer_layer") if isinstance(payload.get("outer_layer"), dict) else None
+    else:
+        tops = [
+            item
+            for item in (payload.get("base_layer"), payload.get("mid_layer"))
+            if isinstance(item, dict)
+        ]
+        bottom = None
+        outerwear = payload.get("outer_layer") if isinstance(payload.get("outer_layer"), dict) else None
+    accessories = payload.get("accessories")
     return ClothingLayers.model_validate(
         {
-            "base_layer": payload["base_layer"],
-            "mid_layer": payload.get("mid_layer"),
-            "outer_layer": payload.get("outer_layer"),
-            "accessories": payload.get("accessories", []),
+            "tops": tops,
+            "bottom": bottom,
+            "outerwear": outerwear,
+            "accessories": accessories if isinstance(accessories, list) else [],
             "risk_level": payload["risk_level"],
             "utci_category": payload["utci_category"],
         }

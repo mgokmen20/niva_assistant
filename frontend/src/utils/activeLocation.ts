@@ -2,12 +2,6 @@ import type { ActiveLocation } from '../types/api'
 
 export const ACTIVE_LOCATION_STORAGE_KEY = 'niva.location'
 
-export const DEFAULT_LOCATION: ActiveLocation = {
-  name: 'Münsingen, Bern',
-  lat: 46.8732,
-  lon: 7.5621,
-}
-
 const NAME_MAX_LENGTH = 120
 
 function isLatitude(value: unknown): value is number {
@@ -18,11 +12,11 @@ function isLongitude(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= -180 && value <= 180
 }
 
-export function readStoredLocation(): ActiveLocation {
+export function readStoredLocation(): ActiveLocation | null {
   try {
     const raw = window.localStorage.getItem(ACTIVE_LOCATION_STORAGE_KEY)
     if (raw === null) {
-      return DEFAULT_LOCATION
+      return null
     }
     const parsed = JSON.parse(raw) as Partial<ActiveLocation>
     if (
@@ -32,11 +26,11 @@ export function readStoredLocation(): ActiveLocation {
       !isLatitude(parsed.lat) ||
       !isLongitude(parsed.lon)
     ) {
-      return DEFAULT_LOCATION
+      return null
     }
     return { name: parsed.name, lat: parsed.lat, lon: parsed.lon }
   } catch {
-    return DEFAULT_LOCATION
+    return null
   }
 }
 

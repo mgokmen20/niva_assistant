@@ -32,6 +32,7 @@ export interface Dictionary {
     tryAgain: string
     dismiss: string
     currentLocation: string
+    locating: string
     searchCity: string
     morning: string
     afternoon: string
@@ -59,6 +60,9 @@ export interface Dictionary {
     base: string
     mid: string
     outer: string
+    top: string
+    bottom: string
+    outerwear: string
     accessories: string
     todaysOutfit: string
   }
@@ -123,6 +127,67 @@ export interface Dictionary {
     thermalSaved: string
     preferredLanguage: string
     languageSaved: string
+    tabSettings: string
+    tabWardrobe: string
+    wardrobeEmpty: string
+    wardrobeLoading: string
+    wardrobeAdd: string
+    itemName: string
+    itemNamePlaceholder: string
+    imageUrl: string
+    imageUrlPlaceholder: string
+    category: string
+    thickness: string
+    style: string
+    color: string
+    waterproof: string
+    addItem: string
+    addingItem: string
+    itemAdded: string
+    updateItem: string
+    updatingItem: string
+    itemUpdated: string
+    editItem: string
+    cancelEdit: string
+    wardrobeEdit: string
+    columnName: string
+    columnCategory: string
+    columnDetails: string
+    columnStatus: string
+    columnActions: string
+    deleteItem: string
+    itemDeleted: string
+    activeItem: string
+    laundryItem: string
+    categoryLabels: {
+      'T-Shirt': string
+      Sweater: string
+      Pants: string
+      Outerwear: string
+      Shorts: string
+      Accessory: string
+    }
+    thicknessLabels: {
+      Thin: string
+      Normal: string
+      Thick: string
+      Thermal: string
+    }
+    styleLabels: {
+      Casual: string
+      Sport: string
+      Formal: string
+      Outdoor: string
+    }
+    colorLabels: {
+      Black: string
+      Blue: string
+      Red: string
+      White: string
+      Green: string
+      Navy: string
+      Grey: string
+    }
   }
   workspace: {
     nav: string

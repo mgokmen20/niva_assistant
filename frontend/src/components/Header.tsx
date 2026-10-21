@@ -59,26 +59,26 @@ export function Header({
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:px-6">
+    <header className="sticky top-0 z-20 border-b border-gray-200 bg-white pt-[env(safe-area-inset-top)]">
+      <div className="mx-auto flex max-w-6xl flex-nowrap items-center justify-between gap-2 overflow-hidden px-4 py-2 sm:px-6">
         <button
           type="button"
           onClick={onOpenWeather}
           aria-label={view === 'profile' ? messages.profile.back : messages.header.weather}
-          className="flex min-h-12 min-w-0 items-center gap-3 rounded-2xl pr-2 text-left transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-800"
+          className="flex shrink-0 items-center gap-2 rounded-md pr-1 text-left transition-colors hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
         >
           <span
             aria-hidden="true"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow-sm"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white"
           >
-            <CloudSun size={22} />
+            <CloudSun size={18} />
           </span>
           <span className="min-w-0">
-            <span className="block text-xl font-semibold leading-none tracking-tight text-slate-950">Niva</span>
-            <span className="brand-subtitle mt-1 hidden text-xs font-medium text-slate-500 md:block">{messages.header.companion}</span>
+            <span className="block text-lg font-semibold leading-none tracking-tight text-slate-950">Niva</span>
+            <span className="brand-subtitle mt-0.5 hidden whitespace-nowrap text-xs font-medium text-slate-500 lg:block">{messages.header.companion}</span>
           </span>
         </button>
-        <div className="hidden items-center justify-end gap-2 md:flex">
+        <div className="hidden min-w-0 flex-nowrap items-center justify-end gap-2 md:flex">
           <LanguageSwitch />
           <UserNav
             view={view}
@@ -86,11 +86,11 @@ export function Header({
             onOpenWorkspace={onOpenWorkspace}
             onOpenTravel={onOpenTravel}
           />
-          <SeniorSwitch />
+          <SeniorSwitch compact />
         </div>
         <button
           type="button"
-          className="inline-flex h-12 min-h-12 w-12 min-w-12 items-center justify-center rounded-2xl bg-slate-50 text-slate-950 ring-1 ring-slate-200 md:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-700 transition-colors hover:bg-gray-100 md:hidden"
           aria-expanded={menuOpen}
           aria-controls={menuId}
           aria-label={menuOpen ? messages.header.closeMenu : messages.header.menu}
@@ -130,7 +130,11 @@ export function Header({
             </div>
             <button
               type="button"
-              className="mt-4 min-h-12 w-full rounded-2xl bg-indigo-800 px-4 text-sm font-semibold text-white"
+              className={`mt-4 w-full rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
+                user === null
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'text-gray-600 hover:bg-red-50 hover:text-red-600'
+              }`}
               onClick={() => {
                 closeMenu()
                 if (user === null) {
@@ -152,7 +156,7 @@ export function Header({
 function LanguageSwitch() {
   const { language, setLanguage, messages } = useI18n()
   return (
-    <div className="inline-flex min-h-12 items-center rounded-full bg-slate-50 p-1 ring-1 ring-slate-200" role="group" aria-label={messages.header.language}>
+    <div className="inline-flex shrink-0 items-center gap-0.5" role="group" aria-label={messages.header.language}>
       {APP_LANGUAGES.map((code) => {
         const selected = language === code
         return (
@@ -161,8 +165,10 @@ function LanguageSwitch() {
             type="button"
             aria-pressed={selected}
             onClick={() => void setLanguage(code)}
-            className={`min-h-12 min-w-12 rounded-full px-3 text-sm font-semibold transition duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-950 ${
-              selected ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-white'
+            className={`whitespace-nowrap text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+              selected
+                ? 'bg-blue-50 text-blue-600 font-semibold rounded-md px-2 py-1'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md px-2 py-1'
             }`}
           >
             {LANGUAGE_LABEL[code]}
@@ -173,7 +179,7 @@ function LanguageSwitch() {
   )
 }
 
-function SeniorSwitch() {
+function SeniorSwitch({ compact = false }: { compact?: boolean }) {
   const { isSeniorMode, toggleSeniorMode } = useSeniorMode()
   const { messages } = useI18n()
   return (
@@ -183,20 +189,18 @@ function SeniorSwitch() {
       aria-checked={isSeniorMode}
       aria-label={messages.header.seniorMode}
       onClick={toggleSeniorMode}
-      className="flex min-h-12 w-full items-center justify-between gap-3 rounded-full bg-slate-50 px-3 ring-1 ring-slate-200 transition duration-300 hover:ring-slate-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black md:w-auto md:justify-start"
+      className="flex w-full shrink-0 items-center justify-between gap-2 whitespace-nowrap rounded-md px-2 py-1 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 md:w-auto md:justify-start"
     >
-      <span className={isSeniorMode ? 'text-xl font-bold text-black' : 'text-sm font-semibold text-slate-700'}>
-        {messages.header.seniorMode}
-      </span>
+      <span className={compact ? 'hidden whitespace-nowrap lg:inline' : 'whitespace-nowrap'}>{messages.header.seniorMode}</span>
       <span
         aria-hidden="true"
-        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-300 ${
-          isSeniorMode ? 'bg-black' : 'bg-slate-300'
+        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-300 ${
+          isSeniorMode ? 'bg-blue-600' : 'bg-gray-300'
         }`}
       >
         <span
-          className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-300 ease-out ${
-            isSeniorMode ? 'translate-x-5' : 'translate-x-0'
+          className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-300 ease-out ${
+            isSeniorMode ? 'translate-x-4' : 'translate-x-0'
           }`}
         />
       </span>
@@ -210,8 +214,8 @@ function MenuLink({ label, current, onClick }: { label: string; current: boolean
       type="button"
       aria-current={current ? 'page' : undefined}
       onClick={onClick}
-      className={`min-h-12 rounded-2xl px-4 text-left text-base font-semibold ${
-        current ? 'bg-blue-700 text-white' : 'bg-slate-50 text-slate-950 ring-1 ring-slate-200'
+      className={`whitespace-nowrap rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
+        current ? 'bg-gray-100 text-gray-900' : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
       }`}
     >
       {label}
